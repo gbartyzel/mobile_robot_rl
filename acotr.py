@@ -8,13 +8,16 @@ class Actor(object):
         self.state_dim = state_dim
         self.action_bound = action_bound
         self.sess = sess
-        self.initializer = tf.random_normal_initializer(stddev=0.01)
 
         self._build_network()
         self._build_target_network()
         self._build_train_method()
 
+        self.sess.run(tf.global_variables_initializer())
+        self.update_target_network()
+
     def _build_network(self):
+        initializer = tf.random_normal_initializer(stddev=0.01)
         self.net_params = []
         with tf.variable_scope('actor_model'):
             self.states = tf.placeholder(
@@ -22,7 +25,7 @@ class Actor(object):
 
             with tf.variable_scope('layer_1'):
                 w_1 = tf.get_variable(
-                    'w', [self.state_dim, 400], tf.float32, self.initializer)
+                    'w', [self.state_dim, 400], tf.float32, initializer)
                 b_1 = tf.get_variable(
                     'b', [400], tf.float32, tf.zeros_initializer(0.0))
                 h_1 = tf.nn.tanh(tf.matmul(self.states, w_1) + b_1)
@@ -30,7 +33,7 @@ class Actor(object):
 
             with tf.variable_scope('layer_2'):
                 w_2 = tf.get_variable(
-                    'w', [400, 300], tf.float32, self.initializer)
+                    'w', [400, 300], tf.float32, initializer)
                 b_2 = tf.get_variable(
                     'b', [300], tf.float32, tf.zeros_initializer(0.0))
                 h_2 = tf.nn.tanh(tf.matmul(h_1, w_2) + b_2)
@@ -38,9 +41,10 @@ class Actor(object):
 
             with tf.variable_scope('output_layer'):
                 w_3 = tf.get_variable(
-                    'w', [300, self.action_dim], tf.float32, self.initializer)
+                    'w', [300, self.action_dim], tf.float32, initializer)
                 b_3 = tf.get_variable(
-                    'b', [self.action_dim], tf.float32, tf.zeros_initializer(0.0))
+                    'b', [self.action_dim], tf.float32,
+                    tf.zeros_initializer(0.0))
                 h_3 = tf.nn.tanh(tf.matmul(h_2, w_3) + b_3)
                 self.net_params.extend((w_3, b_3))
                 self.output = tf.multiply(h_3, self.action_bound)
@@ -88,17 +92,17 @@ class Actor(object):
     def update_target_network(self):
         self.sess(self.target_update)
 
-    def predict(self, state):
+    def action(self, state):
         return self.sess.run(self.output, feed_dict={
             self.states: [state]
         })[0]
 
-    def predicts(self, batch_state):
+    def actions(self, batch_state):
         return self.sess.run(self.output, feed_dict={
             self.states: batch_state
         })
 
-    def target_predicts(self, batch_state):
+    def target_actions(self, batch_state):
         return self.sess.run(self.target_output, feed_dict={
             self.target_states: batch_state
         })

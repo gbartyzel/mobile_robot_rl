@@ -29,15 +29,25 @@ class Navigation(object):
         self.wheel_radius = wheel_diameter / 2.0
         self.body_width = robot_width
 
-    @staticmethod
-    def _angle_correction(angle):
-        if angle >= 0:
-            angle = np.fmod((angle + np.pi), (2 * np.pi)) - np.pi
+    @property
+    def get_current_position(self):
+        return self.position
 
-        if angle < 0:
-            angle = np.fmod((angle - np.pi), (2 * np.pi)) + np.pi
+    @property
+    def get_navigation_error(self):
+        return np.round(self.nav_data, 3)
 
-        return np.round(angle, 6)
+    @property
+    def get_path(self):
+        return self.sum_path
+
+    @property
+    def get_rotation(self):
+        return self.position[2]
+
+    @property
+    def get_delta_theta(self):
+        return self.delta_beta
 
     def compute_delta_phi(self, phi):
         if not phi:
@@ -98,21 +108,16 @@ class Navigation(object):
     def set_target_position(self, target_position):
         self.target_pos = np.asarray(target_position)
 
-    def get_current_position(self):
-        return self.position
-
-    def get_navigation_error(self):
-        return np.round(self.nav_data, 3)
-
-    def get_path(self):
-        return self.sum_path
-
-    def get_rotation(self):
-        return self.position[2]
-
-    def get_delta_theta(self):
-        return self.delta_beta
-
     def reset(self):
         self.sum_path = 0
         self.position = self.start_pos
+
+    @staticmethod
+    def _angle_correction(angle):
+        if angle >= 0:
+            angle = np.fmod((angle + np.pi), (2 * np.pi)) - np.pi
+
+        if angle < 0:
+            angle = np.fmod((angle - np.pi), (2 * np.pi)) + np.pi
+
+        return np.round(angle, 6)

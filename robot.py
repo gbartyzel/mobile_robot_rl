@@ -10,47 +10,50 @@ class Robot(object):
     """"
     Robot class for V-REP smarbot model
     """
-    def __init__(self,  client, diameter, width, streams_names, objects_names):
+    def __init__(self,
+                 client,
+                 diameter,
+                 width,
+                 dt,
+                 velocity_bound,
+                 streams_names,
+                 objects_names):
         """
         :param client: v-rep connection client ID 
         :param diameter: robot wheel diameter
         :param width: robot body width (distance between wheels)
-        :param streams_names: names of v-rep model streams
-        :param objects_names: name of v-rep model objects
+        :param dt: time of one simulation step in sec
+        :param velocity_bound: absolute value of velocity bound for motors
+        :param streams_names: list of v-rep model's streams:
+                              0 - proximity sensor signal,
+                              1 - accelerometer signal,
+                              2 - gyroscope signal,
+                              3 - left encoder signal,
+                              4 - right encoder signal
+        :param objects_names: list of v-rep model's objects:
+                              0 - lef motor handler,
+                              1 - right motor handler,
+                              2 - body handler
         """
-        self.client_id = client
-        self.wheel_diameter = diameter
-        self.body_width = width
-        self.dt = 0.1
+
         self.objects_names = objects_names
         self.streams_names = streams_names
         # 0 - proximity sensor signal, 1 - accelerometer signal
         # 2 - gyroscope signal
         self.objects_handlers = []
-        # 0 - left motor handler, 1 - right motor handler, 2 = body handler
 
         self.total_phi = [0.0, 0.0]
-        self.velocities = [0.0, 0.0]
         self.dphi = [0.0, 0.0]
-        self.proximity_data = np.zeros(5).tolist()
-        self.gyroscope_data = 0.0
-        self.accelerometer_data = [0.0, 0.0, 0.0]
+
+        self._client_id = client
+        self._wheel_diameter = diameter
+        self._body_width = width
+        self._dt = dt
+        self._vel_bound = velocity_bound
 
         self.initialize()
 
-        self.set_motor_velocities(self.velocities)
-
-    @staticmethod
-    def _noise_model(clean_input, std_dev):
-        """
-        Method that transfer noiseless signal from simulator to signal with
-        noise.
-        :param clean_input: noiseless signal 
-        :param std_dev: standard deviation
-        :return: noised signal
-        """
-        noise_data = np.random.normal(clean_input, std_dev)
-        return noise_data.tolist()
+        self.set_motor_velocities([0.0, 0.0])
 
     def initialize(self):
         """
@@ -62,7 +65,7 @@ class Robot(object):
 
             while res != vrep.simx_return_ok:
                 res, temp = vrep.simxGetObjectHandle(
-                    self.client_id, object_n, vrep.simx_opmode_oneshot_wait)
+                    self._client_id, object_n, vrep.simx_opmode_oneshot_wait)
                 self.objects_handlers.append(temp)
 
         for i in range(5):
@@ -70,24 +73,27 @@ class Robot(object):
             while res != vrep.simx_return_ok:
                 if i in range(2):
                     res, temp = vrep.simxReadStringStream(
-                        self.client_id, self.streams_names[i],
+                        self._client_id, self.streams_names[i],
                         vrep.simx_opmode_streaming)
                 else:
                     res, temp = vrep.simxGetFloatSignal(
-                        self.client_id, self.streams_names[i],
+                        self._client_id, self.streams_names[i],
                         vrep.simx_opmode_streaming)
-        return None
 
-    def reset(self):
-        self.total_phi = [0.0, 0.0]
-        self.dphi = [0.0, 0.0]
-        self.velocities = [0.0, 0.0]
-        self.proximity_data = [0.0, 0.0, 0.0, 0.0]
-        self.gyroscope_data = 0.0
-        self.accelerometer_data = [0.0, 0.0, 0.0]
-        self.objects_handlers = []
+    @property
+    def get_wheel_diameter(self):
+        """
+        :return: robot wheel diameter 
+        """
+        return self._wheel_diameter
 
-        self.initialize()
+    @property
+    def get_width(self):
+        """
+        :return: robot body width 
+        """
+        return self._body_width
+
 
     def read_encoders(self):
         """
@@ -96,7 +102,7 @@ class Robot(object):
         """
         for i in range(2):
             res, temp = vrep.simxGetFloatSignal(
-                self.client_id, self.streams_names[i + 3],
+                self._client_id, self.streams_names[i + 3],
                 vrep.simx_opmode_buffer)
 
             if res == vrep.simx_return_ok:
@@ -110,108 +116,71 @@ class Robot(object):
         Compute wheels velocities.
         :return: wheels velocities 
         """
-        self.velocities = (np.asarray(self.dphi) / self.dt).tolist()
-        vel = (np.sum(self.velocities) * self.wheel_diameter / 2) / 2
+        self.velocities = (np.asarray(self.dphi) / self._dt).tolist()
+        vel = (np.sum(self.velocities) * self._wheel_diameter / 2) / 2
         return np.round(self.velocities + [vel], 2).tolist()
 
     def read_proximity_sensors(self):
         """
         :return: distances measured by proximity sensors 
         """
-        res, packed_vec = vrep.simxReadStringStream(self.client_id,
-                                                    self.streams_names[0],
-                                                    vrep.simx_opmode_buffer)
+        res, packed_vec = vrep.simxReadStringStream(
+            self._client_id, self.streams_names[0], vrep.simx_opmode_buffer)
 
         if res == vrep.simx_return_ok:
-            unpacked_vec = vrep.simxUnpackFloats(packed_vec)
-            unpacked_vec = unpacked_vec[0:5]
+            unpacked_vec = vrep.simxUnpackFloats(packed_vec)[0:5]
 
-            self.proximity_data = self._noise_model(unpacked_vec, 0.0001)
+            self.proximity_data = self._noise_model(unpacked_vec, 0.005)
             self.proximity_data = np.round(self.proximity_data, 3)
 
             self.proximity_data[self.proximity_data > 2.0] = 2.0
             self.proximity_data[self.proximity_data < 0.02] = 0.02
 
-            return self.proximity_data.tolist()
-        else:
-            return self.proximity_data.tolist()
+        return self.proximity_data
 
     def read_accelerometer(self):
         """
         :return: absolute robot acceleration measured by accelerometer.
         """
-        res, packed_vec = vrep.simxReadStringStream(self.client_id,
-                                                    self.streams_names[1],
-                                                    vrep.simx_opmode_buffer)
+        res, packed_vec = vrep.simxReadStringStream(
+            self._client_id, self.streams_names[1], vrep.simx_opmode_buffer)
 
         if res == vrep.simx_return_ok:
-            unpacked_vec = vrep.simxUnpackFloats(packed_vec)
-            unpacked_vec = unpacked_vec[0:3]
-            self.accelerometer_data = np.round(unpacked_vec, 3)
+            unpacked_vec = vrep.simxUnpackFloats(packed_vec)[0:3]
+            self.accelerometer_data = self._noise_model(unpacked_vec, 0.005)
 
-            return self.accelerometer_data.tolist()
-        else:
-            return [0.0, 0.0, 0.0]
+        return self.accelerometer_data
 
     def read_gyroscope(self):
         """
         :return: robot rotation around Z axies measured by gyroscope
         """
-        res, temp = vrep.simxGetFloatSignal(self.client_id,
-                                            self.streams_names[2],
-                                            vrep.simx_opmode_buffer)
+        res, received_data = vrep.simxGetFloatSignal(
+            self._client_id, self.streams_names[2], vrep.simx_opmode_buffer)
 
         if res == vrep.simx_return_ok:
-            self.gyroscope_data = np.round(temp, 4)
-            return self.gyroscope_data
-        else:
-            return self.gyroscope_data
+            self.gyroscope_data = self._noise_model(received_data, 4)
+
+        return self.gyroscope_data
 
     def set_motor_velocities(self, velocities):
         """
         Method that set target velocities.
         :param velocities: target velocities 
         """
-        velocities = np.asarray(velocities)
-        velocities = np.round(velocities, 1)
-        velocities[velocities > 15.0] = 15.0
-        velocities[velocities < -15.0] = -15.0
+        if velocities:
+            if type(velocities) == list:
+                velocities = np.asarray(velocities)
+            velocities = np.round(velocities, 2)
+            velocities[velocities > self._vel_bound] = self._vel_bound
+            velocities[velocities < -self._vel_bound] = -self._vel_bound
+        else:
+            velocities = np.array([0.0, 0.0])
 
-        for i, velocity in enumerate(velocities):
-            vrep.simxSetJointTargetVelocity(self.client_id,
-                                            self.objects_handlers[i],
-                                            velocity,
-                                            vrep.simx_opmode_oneshot_wait)
-
-        return None
-
-    def set_position(self, position, orientation):
-        """
-        :param position: target robot position 
-        :param orientation: target robot rotation
-        """
-        vrep.simxSetObjectPosition(self.client_id,
-                                   self.objects_handlers[2],
-                                   -1,
-                                   position,
-                                   vrep.simx_opmode_oneshot)
-
-        vrep.simxSetObjectOrientation(self.client_id,
-                                      self.objects_handlers[2],
-                                      -1, orientation,
-                                      vrep.simx_opmode_oneshot)
-
-    def get_wheel_diameter(self):
-        """
-        :return: robot wheel diameter 
-        """
-        return self.wheel_diameter
-
-    def get_width(self):
-        """
-        :return: robot body width 
-        """
-        return self.body_width
+        for i, vel in enumerate(velocities):
+            vrep.simxSetJointTargetVelocity(
+                self._client_id, self.objects_handlers[i], vel,
+                vrep.simx_opmode_oneshot_wait)
 
     def get_position(self):
         """
@@ -219,20 +188,24 @@ class Robot(object):
         environment.
         :return: absolute robot position and orientation
         """
-        res = 0xFFFFFF
-        while res != vrep.simx_return_ok:
-            res, pos = vrep.simxGetObjectPosition(self.client_id,
-                                                  self.objects_handlers[2],
-                                                  -1,
-                                                  vrep.simx_opmode_oneshot)
+        res, pos = vrep.simxGetObjectPosition(
+            self._client_id, self.objects_handlers[2], -1,
+            vrep.simx_opmode_oneshot)
 
-        res = 0xFFFFFF
-        while res != vrep.simx_return_ok:
-            res, rot = vrep.simxGetObjectOrientation(self.client_id,
-                                                     self.objects_handlers[2],
-                                                     -1,
-                                                     vrep.simx_opmode_oneshot)
+        res, rot = vrep.simxGetObjectOrientation(
+            self._client_id, self.objects_handlers[2], -1,
+            vrep.simx_opmode_oneshot)
 
-        pos = np.round(np.asarray(pos), 3).tolist()
-        rot = np.round(np.asarray(rot), 3).tolist()
-        return pos + rot
+        return np.round(np.concatenate((np.asarray(pos), np.asarray(rot))), 5)
+
+    @staticmethod
+    def _noise_model(clean_input, std_dev):
+        """
+        Method that transfer noiseless signal from simulator to signal with
+        noise.
+        :param clean_input: noiseless signal 
+        :param std_dev: standard deviation
+        :return: noised signal
+        """
+        noise_data = np.random.normal(clean_input, std_dev)
+        return noise_data.tolist()
