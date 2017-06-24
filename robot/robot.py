@@ -1,13 +1,9 @@
 import numpy as np
-
-try:
-    import vrep
-except:
-    print('Error!')
+import vrep
 
 
 class Robot(object):
-    """"
+    """
     Robot class for V-REP smarbot model
     """
     def __init__(self,
@@ -19,7 +15,7 @@ class Robot(object):
                  streams_names,
                  objects_names):
         """
-        :param client: v-rep connection client ID 
+        :param client: v-rep connection client ID
         :param diameter: robot wheel diameter
         :param width: robot body width (distance between wheels)
         :param dt: time of one simulation step in sec
@@ -38,8 +34,7 @@ class Robot(object):
 
         self.objects_names = objects_names
         self.streams_names = streams_names
-        # 0 - proximity sensor signal, 1 - accelerometer signal
-        # 2 - gyroscope signal
+        
         self.objects_handlers = []
 
         self.total_phi = [0.0, 0.0]
@@ -81,16 +76,16 @@ class Robot(object):
                         vrep.simx_opmode_streaming)
 
     @property
-    def get_wheel_diameter(self):
+    def wheel_diameter(self):
         """
         :return: robot wheel diameter 
         """
         return self._wheel_diameter
 
     @property
-    def get_width(self):
+    def body_width(self):
         """
-        :return: robot body width 
+        :return: robot body width
         """
         return self._body_width
 
@@ -98,7 +93,7 @@ class Robot(object):
     def read_encoders(self):
         """
         Read temporary rotation of the wheels.
-        :return: total rotation angle of the wheels. 
+        :return: total rotation angle of the wheels
         """
         for i in range(2):
             res, temp = vrep.simxGetFloatSignal(
@@ -114,7 +109,7 @@ class Robot(object):
     def read_velocities(self):
         """
         Compute wheels velocities.
-        :return: wheels velocities 
+        :return: wheels velocities
         """
         self.velocities = (np.asarray(self.dphi) / self._dt).tolist()
         vel = (np.sum(self.velocities) * self._wheel_diameter / 2) / 2
@@ -122,7 +117,7 @@ class Robot(object):
 
     def read_proximity_sensors(self):
         """
-        :return: distances measured by proximity sensors 
+        :return: distances measured by proximity sensors
         """
         res, packed_vec = vrep.simxReadStringStream(
             self._client_id, self.streams_names[0], vrep.simx_opmode_buffer)
@@ -166,10 +161,10 @@ class Robot(object):
     def set_motor_velocities(self, velocities):
         """
         Method that set target velocities.
-        :param velocities: target velocities 
+        :param velocities: target velocities
         """
         if velocities:
-            if type(velocities) == list:
+            if isinstance(velocities, list):
                 velocities = np.asarray(velocities)
             velocities = np.round(velocities, 2)
             velocities[velocities > self._vel_bound] = self._vel_bound
@@ -182,7 +177,7 @@ class Robot(object):
                 self._client_id, self.objects_handlers[i], vel,
                 vrep.simx_opmode_oneshot_wait)
 
-    def get_position(self):
+    def position(self):
         """
         The output od this method is absolute robot position in simulated
         environment.
@@ -195,7 +190,7 @@ class Robot(object):
         res, rot = vrep.simxGetObjectOrientation(
             self._client_id, self.objects_handlers[2], -1,
             vrep.simx_opmode_oneshot)
-
+        rot = rot[2]
         return np.round(np.concatenate((np.asarray(pos), np.asarray(rot))), 5)
 
     @staticmethod

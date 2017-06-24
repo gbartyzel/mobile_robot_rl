@@ -8,11 +8,14 @@ class Navigation(object):
     target.
     """
     def __init__(self,
-                 start_position, target_position, wheel_diameter, robot_width):
+                 start_position,
+                 target_position,
+                 wheel_diameter,
+                 robot_width):
 
-        self.start_pos = np.asarray(start_position)
+        self.position = np.asarray(start_position)
         self.target_pos = np.asarray(target_position)
-        self.position = self.start_pos
+
         # index 0 - x position
         # index 1 - y position
         # index 2 - theta rotation
@@ -30,23 +33,23 @@ class Navigation(object):
         self.body_width = robot_width
 
     @property
-    def get_current_position(self):
+    def position(self):
         return self.position
 
     @property
-    def get_navigation_error(self):
+    def navigation_error(self):
         return np.round(self.nav_data, 3)
 
     @property
-    def get_path(self):
+    def path(self):
         return self.sum_path
 
     @property
-    def get_rotation(self):
+    def rotation(self):
         return self.position[2]
 
     @property
-    def get_delta_theta(self):
+    def delta_theta(self):
         return self.delta_beta
 
     def compute_delta_phi(self, phi):
@@ -64,7 +67,7 @@ class Navigation(object):
 
         self.compute_delta_phi(phi)
         self.compute_path()
-        # self.compute_gyro_rotation(cav)
+        # self.compute_gyro_rotation(av)
 
         # self.position += np.array([
         #     self.delta_path * np.cos(self.position[2] + self.delta_beta / 2),
@@ -108,16 +111,12 @@ class Navigation(object):
     def set_target_position(self, target_position):
         self.target_pos = np.asarray(target_position)
 
-    def reset(self):
-        self.sum_path = 0
-        self.position = self.start_pos
-
     @staticmethod
     def _angle_correction(angle):
         if angle >= 0:
-            angle = np.fmod((angle + np.pi), (2 * np.pi)) - np.pi
+            angle = np.mod((angle + np.pi), (2 * np.pi)) - np.pi
 
         if angle < 0:
-            angle = np.fmod((angle - np.pi), (2 * np.pi)) + np.pi
+            angle = np.mod((angle - np.pi), (2 * np.pi)) + np.pi
 
         return np.round(angle, 6)
