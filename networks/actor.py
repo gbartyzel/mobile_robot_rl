@@ -1,5 +1,5 @@
 import tensorflow as tf
-from base import BaseNetwork
+from networks.base import BaseNetwork
 
 
 class Actor(BaseNetwork):

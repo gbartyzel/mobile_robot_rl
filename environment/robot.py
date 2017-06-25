@@ -1,5 +1,5 @@
 import numpy as np
-import vrep
+from vrep import vrep
 
 
 class Robot(object):

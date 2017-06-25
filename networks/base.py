@@ -7,7 +7,7 @@ class BaseNetwork(object):
         if network_type == 'actor':
             self.layer_1 = config.alayer_1
             self.layer_2 = config.alayer_2
-            self.action_bound = self.action_bound
+            self.action_bound = config.action_bound
 
         if network_type == 'critic':
             self.layer_1 = config.clayer_1

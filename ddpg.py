@@ -15,7 +15,7 @@ class DDPGAgent(object):
     def __init__(self, sess, goal, config):
         self.config = config
         self.goal = goal
-        self.sess = sess
+        
         self.actor = Actor(self.sess, self.config)
         self.critic = Critic(self.sess, self.config)
         self.ou_noise = OUNoise(self.config)

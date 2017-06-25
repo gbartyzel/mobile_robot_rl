@@ -26,5 +26,5 @@ class AgentConfig(object):
     path = "/home/souphis/Magisterka/Simulation/"
     scene = "s_navigation_task_1"
     sim_time = 120000
-    vrep = "vrep.sh -h " + str(sim_time) + " -q"
+    vrep = "/opt/V-REP/vrep.sh -h " + str(sim_time) + " -q"
     vrep_param = "-gREMOTEAPISERVERSERVICE_" + str(port) + "_FALSE_FALSE "

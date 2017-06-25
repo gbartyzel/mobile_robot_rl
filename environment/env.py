@@ -3,9 +3,10 @@ import time
 
 from numpy import random
 
-import vrep
-from robot.robot import Robot
-from robot.navigation import Navigation
+from vrep import vrep
+from environment.robot import Robot
+from environment.navigation import Navigation
+
 
 class Env(object):
 

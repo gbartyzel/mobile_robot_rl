@@ -1,10 +1,9 @@
 import tensorflow as tf
 
 from ddpg import DDPGAgent
-from utils.env import Env
+from environment.env import Env
 from utils.config import AgentConfig
-
-import vrep
+from vrep import vrep
 
 def main():
     goal = (2.0, 2.0)
@@ -20,7 +19,7 @@ def main():
                 state = env.reset(client)
                 while vrep.simxGetConnectionId(client) != -1:
                     action = ddpg.noise_action(state)
-                    reward, next_state, done = env.step(action) 
+                    reward, next_state, done = env.step(action)
                     ddpg.observe(state, action, reward, next_state, done)
                     if done:
                         vrep.simxStopSimulation(client, vrep.simx_opmode_oneshot)
