@@ -1,6 +1,3 @@
-import os
-import time
-
 import numpy as np
 import tensorflow as tf
 
@@ -15,27 +12,32 @@ class DDPGAgent(object):
     def __init__(self, sess, goal, config):
         self.config = config
         self.goal = goal
-        
-        self.actor = Actor(self.sess, self.config)
+        self.sess = sess
+
         self.critic = Critic(self.sess, self.config)
+        self.actor = Actor(self.sess, self.config)
         self.ou_noise = OUNoise(self.config)
         self.memory = ReplayMemory(self.config.memory_size)
 
     def learn(self):
         train_batch = self.memory.sample(self.config.batch_size)
+        state_batch = np.vstack(train_batch[:, 0])
+        action_batch = np.vstack(train_batch[:, 1])
+        reward_batch = train_batch[:, 2]
+        next_state_batch = np.vstack(train_batch[:, 3])
+        done_batch = train_batch[:, 4]
 
-        next_action = self.actor.target_actions(train_batch[:,0])
-        q_value = self.critic.predict(train_batch[:,1], train_batch[:,0])
+        next_action = self.actor.target_actions(next_state_batch)
+        q_value = self.critic.target_prediction(next_action, next_state_batch)
 
-        done = train_batch[:,4] + 0
-        y_batch = (1. - done) * self.config.gamma * q_value + train_batch[:,1]
-        y_batch = np.resize(y_batch,[self.config.batch_size,1])
+        done = done_batch + 0.0
+        y_batch = (1. - done) * self.config.gamma * q_value + reward_batch
+        y_batch = np.resize(y_batch, [self.config.batch_size, 1])
 
-        self.critic.train(y_batch, train_batch[:,0], train_batch[:,1])
-
-        grad_actions = self.actor.actions(train_batch[:,0]) 
-        gradients = self.critic.gradients(train_batch[:,0], grad_actions)
-        self.actor.train(grad_actions, train_batch[:,0])
+        _, loss = self.critic.train(y_batch, state_batch, action_batch)
+        grad_actions = self.actor.actions(state_batch)
+        gradients = self.critic.gradients(state_batch, grad_actions)
+        self.actor.train(gradients, state_batch)
 
         self.actor.update_target_network()
         self.critic.update_target_network()
@@ -57,3 +59,10 @@ class DDPGAgent(object):
 
     def action(self, state):
         return self.actor.action(state)
+
+    def buffer_size(self):
+        return self.memory.size
+
+    def save(self, time_stamp):
+        self.actor.save(time_stamp)
+        self.critic.save(time_stamp)

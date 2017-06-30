@@ -12,8 +12,8 @@ class Navigation(object):
                  target_position,
                  wheel_diameter,
                  robot_width):
-
-        self.position = np.asarray(start_position)
+        print(start_position)
+        self._position = np.asarray(start_position)
         self.target_pos = np.asarray(target_position)
 
         # index 0 - x position
@@ -34,7 +34,7 @@ class Navigation(object):
 
     @property
     def position(self):
-        return self.position
+        return self._position
 
     @property
     def navigation_error(self):
@@ -46,7 +46,7 @@ class Navigation(object):
 
     @property
     def rotation(self):
-        return self.position[2]
+        return self._position[2]
 
     @property
     def delta_theta(self):
@@ -74,8 +74,8 @@ class Navigation(object):
         #     self.delta_path * np.sin(self.position[2] + self.delta_beta / 2),
         #     self.delta_beta
         #     ])
-        self.position = position[0:2] + [position[5]]
-        self.position = np.round(self.position, 3)
+        self._position = position
+        self._position = np.round(self.position, 3)
         self.position[2] = self._angle_correction(self.position[2])
 
         temp = np.sqrt(np.sum((self.target_pos - self.position[0:2])**2))

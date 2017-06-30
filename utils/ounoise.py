@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class OUNoise(object):
 
     def __init__(self, config):

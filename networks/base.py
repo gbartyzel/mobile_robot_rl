@@ -8,12 +8,13 @@ class BaseNetwork(object):
             self.layer_1 = config.alayer_1
             self.layer_2 = config.alayer_2
             self.action_bound = config.action_bound
+            self.lrate = config.alearning_rate
 
         if network_type == 'critic':
             self.layer_1 = config.clayer_1
             self.layer_2 = config.clayer_2
+            self.lrate = config.clearning_rate
 
-        self.lrate = config.learning_rate
         self.tau = config.tau
 
     def _build_network(self):
@@ -34,4 +35,7 @@ class BaseNetwork(object):
         '''
         Overwrite this method by training method of the model's network.
         '''
+        pass
+
+    def save(self, time_stamp):
         pass

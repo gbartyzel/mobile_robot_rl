@@ -163,14 +163,11 @@ class Robot(object):
         Method that set target velocities.
         :param velocities: target velocities
         """
-        if velocities:
-            if isinstance(velocities, list):
-                velocities = np.asarray(velocities)
-            velocities = np.round(velocities, 2)
-            velocities[velocities > self._vel_bound] = self._vel_bound
-            velocities[velocities < -self._vel_bound] = -self._vel_bound
-        else:
-            velocities = np.array([0.0, 0.0])
+        if isinstance(velocities, list):
+            velocities = np.asarray(velocities)
+        velocities = np.round(velocities, 2)
+        velocities[velocities > self._vel_bound] = self._vel_bound
+        velocities[velocities < -self._vel_bound] = -self._vel_bound
 
         for i, vel in enumerate(velocities):
             vrep.simxSetJointTargetVelocity(
@@ -190,8 +187,8 @@ class Robot(object):
         res, rot = vrep.simxGetObjectOrientation(
             self._client_id, self.objects_handlers[2], -1,
             vrep.simx_opmode_oneshot)
-        rot = rot[2]
-        return np.round(np.concatenate((np.asarray(pos), np.asarray(rot))), 5)
+
+        return np.round(pos + [rot[2]], 5)
 
     @staticmethod
     def _noise_model(clean_input, std_dev):
@@ -203,4 +200,4 @@ class Robot(object):
         :return: noised signal
         """
         noise_data = np.random.normal(clean_input, std_dev)
-        return noise_data.tolist()
+        return noise_data
