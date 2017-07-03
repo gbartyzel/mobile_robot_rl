@@ -1,3 +1,9 @@
+import numpy as np
+import tensorflow as tf
+
+SEED = 1337
+
+
 class BaseNetwork(object):
 
     def __init__(self, config, network_type):
@@ -15,18 +21,15 @@ class BaseNetwork(object):
             self.layer_2 = config.clayer_2
             self.lrate = config.clearning_rate
 
+        self.seed = config.seed
         self.tau = config.tau
 
-    def _build_network(self):
-        '''
-        Overwrite this method by method which creates basic network
-        of the model.
-        '''
+    def save(self, time_stamp):
         pass
 
-    def _build_target_network(self):
+    def _build_network(self, name):
         '''
-        Overwrite this method by method which creates target network
+        Overwrite this method by method which creates basic network
         of the model.
         '''
         pass
@@ -37,5 +40,7 @@ class BaseNetwork(object):
         '''
         pass
 
-    def save(self, time_stamp):
-        pass
+    def _variable(self, name, shape, fan):
+        init = tf.random_uniform_initializer(
+            -1/np.sqrt(fan), 1/np.sqrt(fan), self.seed)
+        return tf.get_variable(name, shape, tf.float32, init)

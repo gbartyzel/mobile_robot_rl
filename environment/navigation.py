@@ -12,10 +12,8 @@ class Navigation(object):
                  target_position,
                  wheel_diameter,
                  robot_width):
-        print(start_position)
         self._position = np.asarray(start_position)
         self.target_pos = np.asarray(target_position)
-
         # index 0 - x position
         # index 1 - y position
         # index 2 - theta rotation

@@ -29,15 +29,15 @@ class DDPGAgent(object):
 
         next_action = self.actor.target_actions(next_state_batch)
         q_value = self.critic.target_prediction(next_action, next_state_batch)
-
         done = done_batch + 0.0
         y_batch = (1. - done) * self.config.gamma * q_value + reward_batch
         y_batch = np.resize(y_batch, [self.config.batch_size, 1])
 
         _, loss = self.critic.train(y_batch, state_batch, action_batch)
-        grad_actions = self.actor.actions(state_batch)
-        gradients = self.critic.gradients(state_batch, grad_actions)
-        self.actor.train(gradients, state_batch)
+        print(loss)
+        gradient_actions = self.actor.actions(state_batch)
+        q_gradients = self.critic.gradients(state_batch, gradient_actions)
+        self.actor.train(q_gradients, state_batch)
 
         self.actor.update_target_network()
         self.critic.update_target_network()
@@ -55,7 +55,8 @@ class DDPGAgent(object):
         pass
 
     def noise_action(self, state):
-        return self.actor.action(state) + self.ou_noise.noise()
+        return np.clip(self.actor.action(state) + self.ou_noise.noise(),
+                       -1.0, 1.0)
 
     def action(self, state):
         return self.actor.action(state)
@@ -66,3 +67,6 @@ class DDPGAgent(object):
     def save(self, time_stamp):
         self.actor.save(time_stamp)
         self.critic.save(time_stamp)
+
+    def _build_summary(self):
+        pass

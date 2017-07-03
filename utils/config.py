@@ -1,6 +1,6 @@
 class AgentConfig(object):
 
-    action_bound = 10
+    action_bound = 1
     action_dim = 2
     state_dim = 7
 
@@ -12,16 +12,17 @@ class AgentConfig(object):
     gamma = 0.99
     alearning_rate = 1e-4
     clearning_rate = 1e-3
+    seed = 1337
     tau = 0.001
 
     batch_size = 64
     memory_size = 1000000
     num_episode = 30000
-    start_learning = 100
+    start_learning = 10000
 
     mu = 0.0
-    sigma = 0.15
-    theta = 0.20
+    sigma = 0.2
+    theta = 0.15
 
     port = 19999
     path = "/home/souphis/Magisterka/Simulation/"
