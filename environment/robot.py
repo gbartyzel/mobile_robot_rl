@@ -59,12 +59,9 @@ class Robot(object):
         :return: nothing to return
         """
         for object_n in self.objects_names:
-            res = 0xFFFFFF
-
-            while res != vrep.simx_return_ok:
-                res, temp = vrep.simxGetObjectHandle(
-                    self._client_id, object_n, vrep.simx_opmode_oneshot_wait)
-                self.objects_handlers.append(temp)
+            res, temp = vrep.simxGetObjectHandle(
+                self._client_id, object_n, vrep.simx_opmode_oneshot_wait)
+            self.objects_handlers.append(temp)
 
         for i in range(5):
             if i in range(2):

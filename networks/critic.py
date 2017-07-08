@@ -1,4 +1,3 @@
-import numpy as np
 import tensorflow as tf
 from networks.base import BaseNetwork
 
@@ -12,7 +11,7 @@ class Critic(BaseNetwork):
         self.states,\
         self.actions,\
         self.q_output,\
-        self.net_params =self._build_network('critic_network')
+        self.net_params = self._build_network('critic_network')
 
         self.target_states,\
         self.target_actions,\
@@ -27,14 +26,10 @@ class Critic(BaseNetwork):
             [self.target_net_params[i].assign(self.net_params[i])
              for i in range(len(self.net_params))])
 
-        self.target_update = [
-            self.target_net_params[i].assign(
-                tf.add(tf.multiply(self.target_net_params[i], (1 - self.tau)),
-                       tf.multiply(self.tau, self.net_params[i])))
-            for i in range(len(self.net_params))
-        ]
+        self.target_update = self._build_update_method()
 
-        self.saver = tf.train.Saver(self.net_params)
+        self.saver, self.target_saver = self._build_saver(
+            'critic_saver', self.net_params, self.target_net_params)
 
     def train(self, batch_y, batch_state, batch_action):
         return self.sess.run([self.optim, self.loss], feed_dict={
@@ -65,8 +60,12 @@ class Critic(BaseNetwork):
         })[0]
 
     def save(self, time_stamp):
-        self.saver.save(self.sess, 'saved_networks/critic/model',
+        self.saver.save(self.sess,
+                        'saved_networks/critic/model',
                         global_step=time_stamp)
+        self.target_saver.save(self.sess,
+                               'saved_networks/target_critic/model',
+                               global_step=time_stamp)
 
     def _build_network(self, name):
         net_params = []
@@ -97,10 +96,10 @@ class Critic(BaseNetwork):
             with tf.variable_scope('output_layer'):
                 w_3 = tf.get_variable(
                     'w', [self.layer_2, 1], tf.float32,
-                    tf.random_uniform_initializer(-3e-3, 3e-3, self.seed))
+                    tf.random_uniform_initializer(-3e-4, 3e-4))
                 b_3 = tf.get_variable(
                     'b', [1], tf.float32,
-                    tf.random_uniform_initializer(-3e-3, 3e-3, self.seed))
+                    tf.random_uniform_initializer(-3e-4, 3e-4))
                 net_params.extend((w_3, b_3))
                 q_output = tf.identity(tf.matmul(h_2, w_3) + b_3)
 
@@ -116,3 +115,13 @@ class Critic(BaseNetwork):
                 weight_decay, 'loss')
             self.optim = tf.train.AdamOptimizer(self.lrate).minimize(self.loss)
             self.action_gradients = tf.gradients(self.q_output, self.actions)
+
+    def _build_update_method(self):
+        with tf.variable_scope('critic_to_target'):
+            return [
+                self.target_net_params[i].assign(
+                    tf.add(tf.multiply(self.target_net_params[i],
+                                       (1 - self.tau)),
+                           tf.multiply(self.tau, self.net_params[i])))
+                for i in range(len(self.net_params))
+            ]

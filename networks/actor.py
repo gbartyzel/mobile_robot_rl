@@ -1,4 +1,3 @@
-import numpy as np
 import tensorflow as tf
 
 from networks.base import BaseNetwork
@@ -26,14 +25,10 @@ class Actor(BaseNetwork):
             [self.target_net_params[i].assign(self.net_params[i])
              for i in range(len(self.net_params))])
 
-        self.target_update = [
-            self.target_net_params[i].assign(
-                tf.add(tf.multiply(self.target_net_params[i], (1 - self.tau)),
-                       tf.multiply(self.tau, self.net_params[i])))
-            for i in range(len(self.net_params))
-        ]
+        self.target_update = self._build_update_method()
 
-        self.saver = tf.train.Saver(self.net_params)
+        self.saver, self.target_saver = self._build_saver(
+            'actor_saver', self.net_params, self.target_net_params)
 
     def train(self, action_gradients, batch_state):
         self.sess.run(self.optim, feed_dict={
@@ -68,8 +63,12 @@ class Actor(BaseNetwork):
             print("Could not find old network weights")
 
     def save(self, time_stamp):
-        self.saver.save(self.sess, 'saved_networks/actor/model',
+        self.saver.save(self.sess,
+                        'saved_networks/actor/model',
                         global_step=time_stamp)
+        self.target_saver.save(self.sess,
+                               'saved_networks/target_actor/model',
+                               global_step=time_stamp)
 
     def _build_network(self, name):
         net_params = []
@@ -94,13 +93,12 @@ class Actor(BaseNetwork):
             with tf.variable_scope('output_layer'):
                 w_3 = tf.get_variable(
                     'w', [self.layer_2, self.action_dim], tf.float32,
-                    tf.random_uniform_initializer(-3e-3, 3e-3, self.seed))
+                    tf.random_uniform_initializer(-3e-3, 3e-3))
                 b_3 = tf.get_variable(
                     'b', [self.action_dim], tf.float32,
-                    tf.random_uniform_initializer(-3e-3, 3e-3, self.seed))
-                h_3 = tf.nn.tanh(tf.matmul(h_2, w_3) + b_3)
+                    tf.random_uniform_initializer(-3e-3, 3e-3))
+                output = tf.nn.sigmoid(tf.matmul(h_2, w_3) + b_3)
                 net_params.extend((w_3, b_3))
-                output = tf.multiply(h_3, self.action_bound)
 
         return states, output, net_params
 
@@ -116,5 +114,12 @@ class Actor(BaseNetwork):
             self.optim = tf.train.AdamOptimizer(self.lrate).apply_gradients(
                 zip(self.params_gradients, self.net_params))
 
-    def _build_summary(self):
-        pass
+    def _build_update_method(self):
+        with tf.variable_scope('actor_to_target'):
+            return [
+                self.target_net_params[i].assign(
+                    tf.add(tf.multiply(self.target_net_params[i],
+                                       (1 - self.tau)),
+                           tf.multiply(self.tau, self.net_params[i])))
+                for i in range(len(self.net_params))
+            ]

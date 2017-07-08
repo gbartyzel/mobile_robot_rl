@@ -10,9 +10,10 @@ from environment.navigation import Navigation
 
 class Env(object):
 
-    def __init__(self, config, goal):
-        self.config = config
-        self.goal = goal
+    def __init__(self, config, goal, phase):
+        self._config = config
+        self._goal = goal
+        self._phase = phase
 
         self._client = self.run_env()
         if self._client != -1:
@@ -26,7 +27,7 @@ class Env(object):
 
             self._prev_error = self._state[5]
             self._max_error = self._prev_error
-            self.motion_check = [[], []]
+            self._motion_check = [[], []]
         else:
             print("Couldn't connect to V-REP!")
             os.system("pkill vrep")
@@ -43,9 +44,16 @@ class Env(object):
     def max_error(self):
         return self._max_error
 
+    @property
+    def current_error(self):
+        return self._nav.navigation_error[0]
+
+    @property
+    def path(self):
+        return self._nav.path
+
     def step(self, action):
-        t = time.time()
-        action = (action * 10.0 + 10.0) / 2.0
+        action *= 10
         self._robot.set_motor_velocities(action)
 
         vrep.simxGetPingTime(self._client)
@@ -53,14 +61,13 @@ class Env(object):
 
         next_state = self._get_state()
         reward, done = self._reward(next_state)
-        print("Step time: ", time.time() - t)
         norm_next_state = self._normalize_state(next_state)
         return reward, norm_next_state, done
 
     def random_action(self):
         vel = np.zeros(2)
         for i in range(2):
-            vel[i] = np.random.uniform(0.0, self.config.action_bound)
+            vel[i] = np.random.uniform(0.0, self._config.action_bound)
         self._robot.set_motor_velocities(vel)
         return vel
 
@@ -74,7 +81,6 @@ class Env(object):
         else:
             self.dist = dist
         error = self._nav.navigation_error
-        print([dist, error])
         return np.concatenate((dist, error))
 
     def _reward(self, state):
@@ -90,25 +96,27 @@ class Env(object):
         else:
             reward = 2 * (self._prev_error - error)
 
-        if len(self.motion_check[0]) >= 300:
-            if (np.abs(np.mean(self.motion_check[0])) > 0.2 or
-                    np.abs(np.mean(self.motion_check[1])) < 0.002):
+        if len(self._motion_check[0]) >= 300:
+            if (np.abs(np.mean(self._motion_check[0])) > 0.2 or
+                    np.abs(np.mean(self._motion_check[1])) < 0.001):
                 reward = -2.0
                 done = True
             else:
-                self.motion_check = [[], []]
+                self._motion_check = [[], []]
         else:
-            self.motion_check[0].append(self._robot.read_gyroscope())
-            self.motion_check[1].append(self._prev_error - error)
+            self._motion_check[0].append(self._robot.read_gyroscope())
+            self._motion_check[1].append(self._prev_error - error)
 
         if error < 0.05:
             print('Target reached!')
             done = True
             reward = 10.0
 
+        if self._phase == "train":
+            reward = np.clip(reward, -1.0, 1.0)
+
         self._prev_error = error
-        reward /= (2 * self._max_error + 10.0)
-        return np.round(reward, 6), done
+        return np.round(reward, 4), done
 
     @staticmethod
     def run_env():
@@ -144,13 +152,14 @@ class Env(object):
             robot.position()
             vrep.simxSynchronousTrigger(self._client)
         navigation = Navigation(
-            robot.position(), self.goal, robot.wheel_diameter, robot.body_width)
+            robot.position(), self._goal, robot.wheel_diameter,
+            robot.body_width)
 
         return robot, navigation
 
     def _normalize_state(self, state):
-        state[0:-2] = state[0:-2] - 1.0
-        state[-2] = (state[-2] - self._max_error / 2) / self._max_error / 2
-        state[-1] = state[-1] / np.pi
-        norm_state = np.clip(state, -1.0, 1.0)
+        state[0:-2] /= 2.0
+        state[-2] /= self._max_error
+        state[-1] = (state[-1] + np.pi) / (2 * np.pi)
+        norm_state = np.clip(state, 0.0, 1.0)
         return norm_state

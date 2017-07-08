@@ -4,30 +4,28 @@ class AgentConfig(object):
     action_dim = 2
     state_dim = 7
 
-    alayer_1 = 400
-    alayer_2 = 300
-    clayer_1 = 400
-    clayer_2 = 300
+    alayer_1 = 100
+    alayer_2 = 75
+    clayer_1 = 100
+    clayer_2 = 75
 
     gamma = 0.99
     alearning_rate = 1e-4
     clearning_rate = 1e-3
-    seed = 1337
+    seed = 667
     tau = 0.001
 
     batch_size = 64
+    explore = 100000
     memory_size = 1000000
     num_episode = 30000
-    start_learning = 10000
+    start_learning = 64
+
+    test_step = 10
+    test_trial = 5
 
     mu = 0.0
     sigma = 0.2
     theta = 0.15
 
-    port = 19999
-    path = "/home/souphis/Magisterka/Simulation/"
-    scene = "s_navigation_task_0.ttt"
-    sim_time = 120000
-    vrep = "/home/souphis/Magisterka/V-REP-GUI/vrep.sh -s" + str(sim_time) + \
-           " -q "
-    vrep_param = "-gREMOTEAPISERVERSERVICE_" + str(port) + "_FALSE_FALSE "
+    sim_time = 2400

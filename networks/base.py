@@ -40,7 +40,13 @@ class BaseNetwork(object):
         '''
         pass
 
+    def _build_saver(self, name, net, target_net):
+        with tf.variable_scope(name):
+            saver = tf.train.Saver(net, name='saver')
+            target_saver = tf.train.Saver(target_net, name='target_saver')
+        return saver, target_saver
+
     def _variable(self, name, shape, fan):
         init = tf.random_uniform_initializer(
-            -1/np.sqrt(fan), 1/np.sqrt(fan), self.seed)
+            -1/np.sqrt(fan), 1/np.sqrt(fan))
         return tf.get_variable(name, shape, tf.float32, init)
