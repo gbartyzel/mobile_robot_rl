@@ -23,11 +23,13 @@ class Env(object):
                 self._client, vrep.simx_opmode_oneshot_wait)
 
             self._robot, self._nav = self._spawn_robot()
-            self._state = self._get_state()
+            self._state = self._get_state('first_run')
 
             self._prev_error = self._state[5]
             self._max_error = self._prev_error
-            self._motion_check = [[], []]
+            self._motion_check = []
+            self._state_c = (self._max_error - np.pi) / 2.0
+            self._state_ac = (self._max_error + np.pi) / 2.0
         else:
             print("Couldn't connect to V-REP!")
             os.system("pkill vrep")
@@ -52,14 +54,14 @@ class Env(object):
     def path(self):
         return self._nav.path
 
-    def step(self, action):
-        action *= 10
-        self._robot.set_motor_velocities(action)
+    def step(self, norm_action):
+        velocities = (norm_action * 10.0 + 10.0) / 2.0
+        self._robot.set_motor_velocities(velocities)
 
         vrep.simxGetPingTime(self._client)
         vrep.simxSynchronousTrigger(self._client)
 
-        next_state = self._get_state()
+        next_state = self._get_state('normal_run')
         reward, done = self._reward(next_state)
         norm_next_state = self._normalize_state(next_state)
         return reward, norm_next_state, done
@@ -71,7 +73,7 @@ class Env(object):
         self._robot.set_motor_velocities(vel)
         return vel
 
-    def _get_state(self):
+    def _get_state(self, phase):
         self._nav.compute_position(
             self._robot.read_encoders(), self._robot.read_gyroscope(),
             self._robot.position())
@@ -81,33 +83,39 @@ class Env(object):
         else:
             self.dist = dist
         error = self._nav.navigation_error
+
         return np.concatenate((dist, error))
 
     def _reward(self, state):
-        dist = state[0:-2]
-        error = state[-2]
+        dist = state[0:5]
+        error = state[5:7]
         done = False
 
         if not all(i > 0.03 for i in dist):
             done = True
             reward = -2.0
-        elif not all(i > 0.1 for i in dist):
-            reward = -0.1
+        # elif all(i < 0.1 for i in dist):
+        #    reward = -0.1
         else:
-            reward = 2 * (self._prev_error - error)
+            if self._phase == 'train':
+                reward = 0.7 * (self._prev_error - error[0]) / 0.015 \
+                      + 0.1 * np.cos(error[1]) \
+                      + 0.2 * (np.sum(dist) / 10.0 - 1.0)
+            else:
+                reward = 2 * (self._prev_error - error[0])
 
-        if len(self._motion_check[0]) >= 300:
-            if (np.abs(np.mean(self._motion_check[0])) > 0.2 or
-                    np.abs(np.mean(self._motion_check[1])) < 0.001):
+        if len(self._motion_check) >= 300:
+            if (# np.abs(np.mean(self._motion_check[0])) > 0.2 or
+                    np.abs(np.mean(self._motion_check)) < 0.001):
                 reward = -2.0
                 done = True
             else:
-                self._motion_check = [[], []]
+                self._motion_check = []
         else:
-            self._motion_check[0].append(self._robot.read_gyroscope())
-            self._motion_check[1].append(self._prev_error - error)
+            # self._motion_check[0].append(self._robot.read_gyroscope())
+            self._motion_check.append(self._prev_error - error)
 
-        if error < 0.05:
+        if error[0] < 0.05:
             print('Target reached!')
             done = True
             reward = 10.0
@@ -115,7 +123,7 @@ class Env(object):
         if self._phase == "train":
             reward = np.clip(reward, -1.0, 1.0)
 
-        self._prev_error = error
+        self._prev_error = error[0]
         return np.round(reward, 4), done
 
     @staticmethod
@@ -127,7 +135,7 @@ class Env(object):
         os.system(cmd_2 + cmd_3 + cmd_4)
         time.sleep(0.5)
         client = vrep.simxStart(
-            '127.0.0.1', 20000, True, True, 5000, 5)
+            '127.0.0.1', 20002, True, True, 5000, 5)
         return client
 
     def _spawn_robot(self):
@@ -158,8 +166,12 @@ class Env(object):
         return robot, navigation
 
     def _normalize_state(self, state):
-        state[0:-2] /= 2.0
-        state[-2] /= self._max_error
-        state[-1] = (state[-1] + np.pi) / (2 * np.pi)
-        norm_state = np.clip(state, 0.0, 1.0)
+        """
+        error_for_norm = self._max_error / 2.0
+        state[0:5] = (state[0:5] - 1.0) / 2.0
+        state[5] = (state[5] - error_for_norm) / error_for_norm
+        state[6] = state[6] / np.pi
+        """
+        norm_state = (state - self._state_c) / self._state_ac
+        norm_state = np.clip(norm_state, -1.0, 1.0)
         return norm_state

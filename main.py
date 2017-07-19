@@ -8,9 +8,8 @@ from utils.config import AgentConfig
 def main():
     goal = (2.0, 2.0)
     config = AgentConfig
-    with tf.Session() as sess:
-        ddpg = DDPGAgent(sess, goal, config)
-        ddpg.train()
+    ddpg = DDPGAgent(goal, config)
+    ddpg.train()
 
 if __name__ == '__main__':
     tf.reset_default_graph()

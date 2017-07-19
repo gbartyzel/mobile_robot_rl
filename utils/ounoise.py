@@ -13,10 +13,10 @@ class OUNoise(object):
         self.reset()
 
     def noise(self):
-        self.state += (
-            self.theta * (self.mu - self.state)
-            + self.sigma * np.random.randn(len(self.state)))
-
+        x = self.state
+        dx = (self.theta * (self.mu - x)
+              + self.sigma * np.random.randn(len(x)))
+        self.state = x + dx
         return self.state
 
     def reset(self):
