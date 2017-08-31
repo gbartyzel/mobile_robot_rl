@@ -155,17 +155,14 @@ class Robot(object):
         #    self.gyroscope_data = self._noise_model(received_data, 0.005)
         return self.gyroscope_data
 
-    def set_motor_velocities(self, velocities):
+    def set_motor_velocities(self, norm_vel):
         """
         Method that set target velocities.
-        :param velocities: target velocities
+        :param norm_vel: normalize target velocities, [-1.0, 1.0]
         """
-        if isinstance(velocities, list):
-            velocities = np.asarray(velocities)
-        velocities = np.round(velocities, 2)
-        velocities[velocities > self._vel_bound] = self._vel_bound
-        velocities[velocities < -self._vel_bound] = -self._vel_bound
-        velocities = np.round(velocities, 2)
+        if isinstance(norm_vel, list):
+            norm_vel = np.asarray(norm_vel)
+        velocities = (norm_vel * self._vel_bound + self._vel_bound) / 2.0
         for i, vel in enumerate(velocities):
             vrep.simxSetJointTargetVelocity(
                 self._client_id, self.objects_handlers[i], vel,
@@ -184,8 +181,7 @@ class Robot(object):
         res, rot = vrep.simxGetObjectOrientation(
             self._client_id, self.objects_handlers[2], -1,
             vrep.simx_opmode_oneshot)
-
-        return np.round(pos + [rot[2]], 5)
+        return np.round(pos[0:2] + [rot[2]], 5)
 
     @staticmethod
     def _noise_model(data, diff):

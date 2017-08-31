@@ -36,7 +36,7 @@ class Navigation(object):
 
     @property
     def navigation_error(self):
-        return np.round(self.nav_data, 3)
+        return np.round(self.nav_data, 5)
 
     @property
     def path(self):
@@ -73,20 +73,19 @@ class Navigation(object):
         #     self.delta_beta
         #     ])
         self._position = position
-        self._position = np.round(self.position, 3)
-        self.position[2] = self._angle_correction(self.position[2])
-
-        temp = np.sqrt(np.sum((self.target_pos - self.position[0:2])**2))
+        self._position = np.round(self._position, 5)
+        self._position[2] = self._angle_correction(self._position[2])
+        temp = np.sqrt(np.sum((self.target_pos - self._position[0:2])**2))
 
         if not np.isnan(temp):
             self.nav_data[0] = temp
 
-        theta = np.arctan2(self.target_pos[1] - self.position[1],
-                           self.target_pos[0] - self.position[0])
+        theta = np.arctan2(self.target_pos[1] - self._position[1],
+                           self.target_pos[0] - self._position[0])
 
         theta = self._angle_correction(theta)
-
-        self.nav_data[1] = self._angle_correction(theta - self.position[2])
+        
+        self.nav_data[1] = self._angle_correction(theta - self._position[2])
 
     def compute_path(self):
 
@@ -112,9 +111,9 @@ class Navigation(object):
     @staticmethod
     def _angle_correction(angle):
         if angle >= 0:
-            angle = np.mod((angle + np.pi), (2 * np.pi)) - np.pi
+            angle = np.fmod((angle + np.pi), (2 * np.pi)) - np.pi
 
         if angle < 0:
-            angle = np.mod((angle - np.pi), (2 * np.pi)) + np.pi
+            angle = np.fmod((angle - np.pi), (2 * np.pi)) + np.pi
 
         return np.round(angle, 6)

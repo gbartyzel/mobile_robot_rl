@@ -1,7 +1,3 @@
-import logging
-import time
-from datetime import timedelta
-
 import numpy as np
 import tensorflow as tf
 
@@ -22,28 +18,20 @@ class DDPGAgent(object):
         self.goal = goal
         self.sess = tf.InteractiveSession()
 
-        self.epsilon = 1.0
         self.total_steps = 0.0
         self._build_summary()
+
+        self.merged = tf.summary.merge_all()
+        self.writer = tf.summary.FileWriter("train_output", self.sess.graph)
 
         self.critic = Critic(self.sess, self.config)
         self.actor = Actor(self.sess, self.config)
         self.ou_noise = OUNoise(self.config)
         self.memory = ReplayMemory(self.config.memory_size)
 
-        self.merged = tf.summary.merge_all()
-        self.writer = tf.summary.FileWriter("train_output", self.sess.graph)
-        self.sess.run(tf.global_variables_initializer())
-
-        self.actor.update_target_network('first_run')
-        self.critic.update_target_network('first_run')
-
     def train(self):
-        logging.basicConfig(filename='learn_log.log', level=logging.INFO)
         for ep in tqdm(range(self.config.num_episode)):
-            start_time = time.time()
-            vrep.simxFinish(-1)
-            env = Env(self.config, self.goal, 'train')
+            env = Env(self.goal)
             client = env.client
             if client != -1:
                 print("Connected to V-REP server")
@@ -61,22 +49,25 @@ class DDPGAgent(object):
                         step += 1
                         ep_reward += reward
                         self.total_steps += 1
-                        if self.total_steps % 10000 == 0:
-                            self.save(int(self.total_steps))
                     else:
-                        vrep.simxStopSimulation(client,
-                                                vrep.simx_opmode_oneshot)
+                        vrep.simxStopSimulation(
+                            client, vrep.simx_opmode_oneshot)
                         if vrep.simxGetConnectionId(client) == -1:
                             break
                 print("Reward: ", ep_reward, "Steps: ", step)
             else:
                 print("Couldn't connect to V-REP server!")
-            vrep.simxFinish(client)
-            elapsed = time.time() - start_time
-            elapsed_time = str(timedelta(seconds=int(elapsed)))
-            logging.info('Time elapsed: %s' % elapsed_time)
             if ep % self.config.test_step == self.config.test_step - 1:
-                self.play(ep)
+                result = self.test()
+                summary = self.sess.run(self.merged, feed_dict={
+                    self.avg_reward: np.mean(result[0]),
+                    self.min_reward: np.min(result[0]),
+                    self.max_reward: np.max(result[0]),
+                    self.avg_steps: np.mean(result[1]),
+                    self.avg_distance: np.mean(result[2]),
+                    self.avg_error: np.mean(result[3])
+                })
+                self.writer.add_summary(summary, int(ep))
 
     def train_mini_batch(self):
         train_batch = self.memory.sample(self.config.batch_size)
@@ -91,12 +82,8 @@ class DDPGAgent(object):
 
         done_batch += 0.0
         y_batch = (1. - done_batch) * self.config.gamma * q_value + reward_batch
-
         y_batch = np.resize(y_batch, [self.config.batch_size, 1])
-        _, loss = self.critic.train(y_batch, state_batch, action_batch)
-
-        # summary = self.sess.run(self.merged)
-        # self.writer.add_summary(summary, int(self.total_steps))
+        self.critic.train(y_batch, state_batch, action_batch)
 
         gradient_actions = self.actor.actions(state_batch)
         q_gradients = self.critic.gradients(state_batch, gradient_actions)
@@ -111,29 +98,31 @@ class DDPGAgent(object):
         if self.memory.count() >= self.config.start_learning:
             self.train_mini_batch()
 
+        if self.total_steps % 10000 == 0:
+            self.actor.save(self.total_steps)
+            self.critic.save(self.total_steps)
+
         if done:
             self.ou_noise.reset()
 
-    def play(self, ep):
-        max_reward = min_reward = avg_reward = avg_steps = 0.0
+    def test(self):
+        rewards = np.zeros(self.config.test_trial)
+        steps = np.zeros(self.config.test_trial)
         path = np.zeros(self.config.test_trial)
         nav_error = np.zeros(self.config.test_trial)
-
         for i in range(self.config.test_trial):
             vrep.simxFinish(-1)
-            env = Env(self.config, self.goal, 'test')
+            env = Env(self.goal)
             if env.client != -1:
                 print("Connected to V-REP server")
                 state = env.state
                 vrep.simxSynchronousTrigger(env.client)
                 done = False
-                step = 0
-                ep_reward = 0.0
-                while step < self.config.sim_time:
+                while steps[i] < self.config.sim_time:
                     if not done:
                         reward, state, done = env.step(self.action(state))
-                        ep_reward += reward
-                        step += 1
+                        rewards[i] += reward
+                        steps[i] += 1
                         path[i] = env.path
                         nav_error[i] = env.current_error
                     else:
@@ -141,46 +130,19 @@ class DDPGAgent(object):
                             env.client, vrep.simx_opmode_oneshot)
                         if vrep.simxGetConnectionId(env.client) == -1:
                             break
-                avg_reward += ep_reward
-                avg_steps += step
-                max_reward = max(ep_reward, max_reward)
-                min_reward = min(ep_reward, min_reward)
             else:
                 print("Couldn't connect to V-REP server!")
-            vrep.simxFinish(env.client)
-
-        avg_steps /= self.config.test_trial
-        avg_reward /= self.config.test_trial
-        avg_path = np.mean(path)
-        avg_error = np.mean(nav_error)
-
-        summary = self.sess.run(self.merged, feed_dict={
-            self.avg_reward: avg_reward,
-            self.min_reward: min_reward,
-            self.max_reward: max_reward,
-            self.avg_steps: avg_steps,
-            self.avg_distance: avg_path,
-            self.avg_error: avg_error
-        })
-        self.writer.add_summary(summary, int(ep))
+        return [rewards, steps, path, nav_error]
 
     def noise_action(self, state):
-        factor = 1/self.config.explore
-        self.epsilon -= factor
-        self.epsilon = max(self.epsilon, 0.1)
-
-        noise = self.ou_noise.noise() * self.epsilon
-        return np.clip(self.actor.action(state) + noise, 0.0, 1.0)
+        noise = self.ou_noise.noise()
+        return np.clip(self.actor.action(state) + noise, -1.0, 1.0)
 
     def action(self, state):
         return self.actor.action(state)
 
     def buffer_size(self):
         return self.memory.size
-
-    def save(self, time_stamp):
-        self.actor.save(time_stamp)
-        self.critic.save(time_stamp)
 
     def _build_summary(self):
         with tf.variable_scope('summary'):
