@@ -1,48 +1,38 @@
-import tensorflow as tf
-
-
 class BaseNetwork(object):
 
-    def __init__(self, config, network_type, sess):
-        self.action_dim = config.action_dim
-        self.state_dim = config.state_dim
+    def __init__(self, sess, network_type):
+        self.action_dim = 2
+        self.state_dim = 7
         self.sess = sess
 
         if network_type == 'actor':
-            self.layers = config.actor_layers
-            self.action_bound = config.action_bound
-            self.lrate = config.alearning_rate
+            self.layers = [400, 300, 300]
+            self.lrate = 1e-4
 
         if network_type == 'critic':
-            self.layers = config.critic_layers
-            self.lrate = config.clearning_rate
+            self.layers = [400, 300, 300]
+            self.lrate = 1e-3
+            self.l2 = 1e-2
 
-        self.tau = config.tau
+        self.tau = 1e-3
 
-    def save(self, time_stamp):
-        pass
+    def prediction(self, *args):
+        raise NotImplementedError
+
+    def target_prediction(self, *args):
+        raise NotImplementedError
+
+    def train(self, *args):
+        raise NotImplementedError
+
+    def update_target_network(self):
+        raise NotImplementedError
 
     def _build_network(self, name):
-        """
-        Overwrite this method by method which creates basic network
-        of the model.
-        """
-        pass
+        raise NotImplementedError
 
     def _build_train_method(self):
-        """
-        Overwrite this method by training method of the model's network.
-        """
-        pass
+        raise NotImplementedError
 
-    def load(self, network):
-        saver = tf.train.Saver(name=network)
-        path = 'saved_' + network + "/model"
-        checkpoint = tf.train.get_checkpoint_state(path)
-        if checkpoint and checkpoint.model_checkpoint_path:
-            saver.restore(self.sess, checkpoint.model_checkpoint_path)
-            print("Successfully loaded:", checkpoint.model_checkpoint_path)
-        else:
-            print("Could not find old network weights")
-
-
+    def _build_update_method(self):
+        raise NotImplementedError

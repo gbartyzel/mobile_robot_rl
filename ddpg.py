@@ -12,25 +12,34 @@ from vrep import vrep
 
 
 class DDPGAgent(object):
+    def __init__(self, FLAGS):
+        self.FLAGS = FLAGS
+        self.goal = (FLAGS.x_goal, FLAGS.y_goal)
+        self._total_steps = 0
 
-    def __init__(self, goal, config):
-        self.config = config
-        self.goal = goal
         self.sess = tf.InteractiveSession()
 
-        self.total_steps = 0.0
+        self.critic = Critic(self.sess, FLAGS.batch_size)
+        self.actor = Actor(self.sess)
         self._build_summary()
 
         self.merged = tf.summary.merge_all()
-        self.writer = tf.summary.FileWriter("train_output", self.sess.graph)
+        self.writer = tf.summary.FileWriter(self.FLAGS.summary_path,
+                                            self.sess.graph)
 
-        self.critic = Critic(self.sess, self.config)
-        self.actor = Actor(self.sess, self.config)
-        self.ou_noise = OUNoise(self.config)
-        self.memory = ReplayMemory(self.config.memory_size)
+        self.sess.run(tf.global_variables_initializer())
+
+        self.actor.update_target_network('copy')
+        self.critic.update_target_network('copy')
+
+        self.saver = self._load()
+        self.ou_noise = OUNoise(action_dim=2)
+
+        self.memory = ReplayMemory(self.FLAGS.memory_size)
 
     def train(self):
-        for ep in tqdm(range(self.config.num_episode)):
+        for ep in tqdm(list(range(self.FLAGS.episodes))):
+            vrep.simxFinish(-1)
             env = Env(self.goal)
             client = env.client
             if client != -1:
@@ -39,78 +48,43 @@ class DDPGAgent(object):
                 vrep.simxSynchronousTrigger(client)
                 done = False
                 step = 0
-                ep_reward = 0.0
-                while step < self.config.sim_time:
+                while step < self.FLAGS.num_steps:
                     if not done:
-                        action = self.noise_action(state)
-                        reward, next_state, done = env.step(action)
-                        self.observe(state, action, reward, next_state, done)
-                        state = next_state
                         step += 1
-                        ep_reward += reward
-                        self.total_steps += 1
+                        action = self._action(state)
+                        reward, next_state, done = env.norm_step(action)
+                        if step >= self.FLAGS.num_steps:
+                            done = True
+
+                        self._observe(state, action, reward, next_state, done)
+                        state = next_state
+                        self._total_steps += 1
                     else:
-                        vrep.simxStopSimulation(
-                            client, vrep.simx_opmode_oneshot)
+                        vrep.simxStopSimulation(client,
+                                                vrep.simx_opmode_oneshot)
                         if vrep.simxGetConnectionId(client) == -1:
                             break
-                print("Reward: ", ep_reward, "Steps: ", step)
             else:
                 print("Couldn't connect to V-REP server!")
-            if ep % self.config.test_step == self.config.test_step - 1:
+            vrep.simxFinish(client)
+            if ep % self.FLAGS.test_episodes == self.FLAGS.test_episodes - 1:
                 result = self.test()
-                summary = self.sess.run(self.merged, feed_dict={
-                    self.avg_reward: np.mean(result[0]),
-                    self.min_reward: np.min(result[0]),
-                    self.max_reward: np.max(result[0]),
-                    self.avg_steps: np.mean(result[1]),
-                    self.avg_distance: np.mean(result[2]),
-                    self.avg_error: np.mean(result[3])
-                })
-                self.writer.add_summary(summary, int(ep))
+                print(result)
 
-    def train_mini_batch(self):
-        train_batch = self.memory.sample(self.config.batch_size)
-        state_batch = np.vstack(train_batch[:, 0])
-        action_batch = np.vstack(train_batch[:, 1])
-        reward_batch = train_batch[:, 2]
-        next_state_batch = np.vstack(train_batch[:, 3])
-        done_batch = train_batch[:, 4]
-
-        next_action = self.actor.target_actions(next_state_batch)
-        q_value = self.critic.target_prediction(next_action, next_state_batch)
-
-        done_batch += 0.0
-        y_batch = (1. - done_batch) * self.config.gamma * q_value + reward_batch
-        y_batch = np.resize(y_batch, [self.config.batch_size, 1])
-        self.critic.train(y_batch, state_batch, action_batch)
-
-        gradient_actions = self.actor.actions(state_batch)
-        q_gradients = self.critic.gradients(state_batch, gradient_actions)
-        self.actor.train(q_gradients, state_batch)
-
-        self.actor.update_target_network()
-        self.critic.update_target_network()
-
-    def observe(self, state, action, reward, next_state, done):
-        self.memory.add(state, action, reward, next_state, done)
-
-        if self.memory.count() >= self.config.start_learning:
-            self.train_mini_batch()
-
-        if self.total_steps % 10000 == 0:
-            self.actor.save(self.total_steps)
-            self.critic.save(self.total_steps)
-
-        if done:
-            self.ou_noise.reset()
+                summary = self.sess.run(
+                    self.merged,
+                    feed_dict={
+                        self.avg_reward: np.mean(result[0]),
+                        self.min_reward: np.min(result[0]),
+                        self.max_reward: np.max(result[0]),
+                        self.avg_steps: np.mean(result[1]),
+                    })
+                self.writer.add_summary(summary, self._total_steps)
 
     def test(self):
-        rewards = np.zeros(self.config.test_trial)
-        steps = np.zeros(self.config.test_trial)
-        path = np.zeros(self.config.test_trial)
-        nav_error = np.zeros(self.config.test_trial)
-        for i in range(self.config.test_trial):
+        rewards = np.zeros(self.FLAGS.test_trials)
+        steps = np.zeros(self.FLAGS.test_trials)
+        for i in range(self.FLAGS.test_trials):
             vrep.simxFinish(-1)
             env = Env(self.goal)
             if env.client != -1:
@@ -118,31 +92,35 @@ class DDPGAgent(object):
                 state = env.state
                 vrep.simxSynchronousTrigger(env.client)
                 done = False
-                while steps[i] < self.config.sim_time:
+                step = 0
+                ep_reward = 0.0
+                while step < self.FLAGS.num_steps:
                     if not done:
-                        reward, state, done = env.step(self.action(state))
-                        rewards[i] += reward
-                        steps[i] += 1
-                        path[i] = env.path
-                        nav_error[i] = env.current_error
+                        step += 1
+                        reward, state, done = env.norm_step(
+                            self._action(state))
+                        ep_reward += reward
+                        if step >= self.FLAGS.num_steps:
+                            done = True
                     else:
-                        vrep.simxStopSimulation(
-                            env.client, vrep.simx_opmode_oneshot)
+                        vrep.simxStopSimulation(env.client,
+                                                vrep.simx_opmode_oneshot)
                         if vrep.simxGetConnectionId(env.client) == -1:
                             break
+                rewards[i] = ep_reward
+                steps[i] = step
             else:
                 print("Couldn't connect to V-REP server!")
-        return [rewards, steps, path, nav_error]
+            vrep.simxFinish(env.client)
 
-    def noise_action(self, state):
+        return [rewards, steps]
+
+    def _action(self, state):
+        return self.actor.prediction([state])[0]
+
+    def _noise_action(self, state):
         noise = self.ou_noise.noise()
-        return np.clip(self.actor.action(state) + noise, -1.0, 1.0)
-
-    def action(self, state):
-        return self.actor.action(state)
-
-    def buffer_size(self):
-        return self.memory.size
+        return np.clip(self.actor.prediction([state])[0] + noise, -1.0, 1.0)
 
     def _build_summary(self):
         with tf.variable_scope('summary'):
@@ -150,11 +128,62 @@ class DDPGAgent(object):
             self.min_reward = tf.placeholder(tf.float32)
             self.max_reward = tf.placeholder(tf.float32)
             self.avg_steps = tf.placeholder(tf.float32)
-            self.avg_error = tf.placeholder(tf.float32)
-            self.avg_distance = tf.placeholder(tf.float32)
             tf.summary.scalar('avg_reward', self.avg_reward)
             tf.summary.scalar('max_reward', self.max_reward)
             tf.summary.scalar('min_reward', self.min_reward)
             tf.summary.scalar('avg_steps', self.avg_steps)
-            tf.summary.scalar('avg_error', self.avg_error)
-            tf.summary.scalar('avg_distance', self.avg_distance)
+
+    def _load(self):
+        saver = tf.train.Saver()
+        checkpoint = tf.train.get_checkpoint_state(self.FLAGS.model_path)
+        if checkpoint and checkpoint.model_checkpoint_path:
+            saver.restore(self.sess, checkpoint.model_checkpoint_path)
+            print("Successfully loaded:", checkpoint.model_checkpoint_path)
+        else:
+            print("Could not find old network weights")
+        return saver
+
+    def _observe(self, state, action, reward, next_state, done):
+        self.memory.add(state, action, reward, next_state, done)
+
+        if self.memory.size >= self.FLAGS.warm_up:
+            self._train_mini_batch()
+
+        if self._total_steps % self.FLAGS.warm_up == 0:
+            self.saver.save(
+                self.sess,
+                self.FLAGS.model_path + '/model',
+                global_step=self._total_steps)
+
+        if done:
+            self.ou_noise.reset()
+
+    def _train_mini_batch(self):
+        train_batch = self.memory.sample(self.FLAGS.batch_size)
+
+        state_batch = np.asarray([data[0] for data in train_batch])
+        action_batch = np.asarray([data[1] for data in train_batch])
+        reward_batch = np.asarray([data[2] for data in train_batch])
+        next_state_batch = np.asarray([data[3] for data in train_batch])
+        done_batch = np.asarray(
+            [data[4] for data in train_batch]).astype(float)
+
+        reward_batch = np.resize(reward_batch, [self.FLAGS.batch_size, 1])
+        done_batch = np.resize(done_batch, [self.FLAGS.batch_size, 1])
+
+        action_batch = np.resize(action_batch, [self.FLAGS.batch_size, 2])
+
+        next_action = self.actor.target_prediction(next_state_batch)
+
+        q_value = self.critic.target_prediction(next_state_batch, next_action)
+
+        y_batch = (1. - done_batch) * self.FLAGS.gamma * q_value + reward_batch
+
+        _, loss = self.critic.train(state_batch, action_batch, y_batch)
+
+        gradient_actions = self.actor.prediction(state_batch)
+        q_gradients = self.critic.gradients(state_batch, gradient_actions)
+        self.actor.train(state_batch, q_gradients)
+
+        self.actor.update_target_network()
+        self.critic.update_target_network()
