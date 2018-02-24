@@ -1,5 +1,5 @@
 import numpy as np
-from vrep import vrep
+from environment.vrep import vrep
 
 
 class Robot(object):
@@ -10,7 +10,8 @@ class Robot(object):
                  diameter=0.06,
                  width=0.154,
                  dt=0.05,
-                 velocity_bound=10.0):
+                 min_velocity=0.0,
+                 max_velocity=10.0):
         self._streams_names = streams_names
 
         self._objects_hanlders = objects_names.copy()
@@ -22,7 +23,7 @@ class Robot(object):
         self._wheel_diameter = diameter
         self._body_width = width
         self._dt = dt
-        self._vel_bound = velocity_bound
+        self._vel_bound = [min_velocity, max_velocity]
 
         self.initialize(objects_names)
 
@@ -35,7 +36,7 @@ class Robot(object):
             self._objects_hanlders[key] = temp
 
         for key, stream in self._streams_names.items():
-            if key == 'proximity' or key == 'accelerometer':
+            if key == "proximity" or key == "accelerometer":
                 vrep.simxReadStringStream(self._client_id, stream,
                                           vrep.simx_opmode_streaming)
             else:
@@ -46,15 +47,15 @@ class Robot(object):
         if isinstance(velocities, list):
             velocities = np.asarray(velocities)
 
-        velocities[velocities < -self._vel_bound] = -self._vel_bound
-        velocities[velocities > self._vel_bound] = self._vel_bound
+        velocities[velocities < self._vel_bound[0]] = self._vel_bound[0]
+        velocities[velocities > self._vel_bound[1]] = self._vel_bound[1]
 
         vrep.simxSetJointTargetVelocity(
-            self._client_id, self._objects_hanlders['left_motor'],
+            self._client_id, self._objects_hanlders["left_motor"],
             velocities[0], vrep.simx_opmode_oneshot_wait)
 
         vrep.simxSetJointTargetVelocity(
-            self._client_id, self._objects_hanlders['right_motor'],
+            self._client_id, self._objects_hanlders["right_motor"],
             velocities[1], vrep.simx_opmode_oneshot_wait)
 
     @property
@@ -70,7 +71,7 @@ class Robot(object):
         return self._vel_bound
 
     def get_encoders_values(self):
-        for i, key in enumerate(['left_encoder', 'right_encoder']):
+        for i, key in enumerate(["left_encoder", "right_encoder"]):
             _, ticks = vrep.simxGetFloatSignal(self._client_id,
                                                self._streams_names[key],
                                                vrep.simx_opmode_buffer)
@@ -87,7 +88,7 @@ class Robot(object):
 
     def get_proximity_values(self):
         _, packed_vec = vrep.simxReadStringStream(
-            self._client_id, self._streams_names['proximity_sensor'],
+            self._client_id, self._streams_names["proximity"],
             vrep.simx_opmode_buffer)
 
         data = vrep.simxUnpackFloats(packed_vec)[0:5]
@@ -100,7 +101,7 @@ class Robot(object):
 
     def get_accelerometer_values(self):
         _, packed_vec = vrep.simxReadStringStream(
-            self._client_id, self._streams_names['acceletometer'],
+            self._client_id, self._streams_names["acceletometer"],
             vrep.simx_opmode_buffer)
 
         data = vrep.simxUnpackFloats(packed_vec)[0:3]
@@ -108,18 +109,18 @@ class Robot(object):
 
     def get_gyroscope_values(self):
         _, data = vrep.simxGetFloatSignal(self._client_id,
-                                          self._streams_names['gyroscope'],
+                                          self._streams_names["gyroscope"],
                                           vrep.simx_opmode_buffer)
 
         return self._noise_model(data, 0.005)
 
     def get_position(self):
         _, pos = vrep.simxGetObjectPosition(self._client_id,
-                                            self._objects_hanlders['robot'],
+                                            self._objects_hanlders["robot"],
                                             -1, vrep.simx_opmode_oneshot)
 
         _, rot = vrep.simxGetObjectOrientation(self._client_id,
-                                               self._objects_hanlders['robot'],
+                                               self._objects_hanlders["robot"],
                                                -1, vrep.simx_opmode_oneshot)
         return np.round(pos[0:2] + [rot[2]], 5)
 

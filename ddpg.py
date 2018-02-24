@@ -12,9 +12,9 @@ from vrep import vrep
 
 
 class DDPGAgent(object):
-    def __init__(self, FLAGS):
-        self.FLAGS = FLAGS
-        self.goal = (FLAGS.x_goal, FLAGS.y_goal)
+    def __init__(self, env, FLAGS):
+        self._env = env
+        self._FLAGS = FLAGS
         self._total_steps = 0
 
         self.sess = tf.InteractiveSession()
@@ -37,36 +37,23 @@ class DDPGAgent(object):
 
         self.memory = ReplayMemory(self.FLAGS.memory_size)
 
+        self.env = Env("room")
+
     def train(self):
         for ep in tqdm(list(range(self.FLAGS.episodes))):
-            vrep.simxFinish(-1)
-            env = Env(self.goal)
-            client = env.client
-            if client != -1:
-                print("Connected to V-REP server")
-                state = env.state
-                vrep.simxSynchronousTrigger(client)
-                done = False
-                step = 0
-                while step < self.FLAGS.num_steps:
-                    if not done:
-                        step += 1
-                        action = self._action(state)
-                        reward, next_state, done = env.norm_step(action)
-                        if step >= self.FLAGS.num_steps:
-                            done = True
+            state = self.env.reset()
+            done = False
+            for step in range(self.env.max_steps):
+                if not done:
+                    action = self._action(state)
+                    reward, next_state, done = self.env.step(action)
+                    self._observe(state, action, reward, next_state, done)
+                    state = next_state
+                    self._total_steps += 1
+                else:
+                    if self.env.stop() == -1:
+                        break
 
-                        self._observe(state, action, reward, next_state, done)
-                        state = next_state
-                        self._total_steps += 1
-                    else:
-                        vrep.simxStopSimulation(client,
-                                                vrep.simx_opmode_oneshot)
-                        if vrep.simxGetConnectionId(client) == -1:
-                            break
-            else:
-                print("Couldn't connect to V-REP server!")
-            vrep.simxFinish(client)
             if ep % self.FLAGS.test_episodes == self.FLAGS.test_episodes - 1:
                 result = self.test()
                 print(result)
@@ -85,34 +72,25 @@ class DDPGAgent(object):
         rewards = np.zeros(self.FLAGS.test_trials)
         steps = np.zeros(self.FLAGS.test_trials)
         for i in range(self.FLAGS.test_trials):
-            vrep.simxFinish(-1)
-            env = Env(self.goal)
-            if env.client != -1:
-                print("Connected to V-REP server")
-                state = env.state
-                vrep.simxSynchronousTrigger(env.client)
-                done = False
-                step = 0
-                ep_reward = 0.0
-                while step < self.FLAGS.num_steps:
-                    if not done:
-                        step += 1
-                        reward, state, done = env.norm_step(
-                            self._action(state))
-                        ep_reward += reward
-                        if step >= self.FLAGS.num_steps:
-                            done = True
-                    else:
-                        vrep.simxStopSimulation(env.client,
-                                                vrep.simx_opmode_oneshot)
-                        if vrep.simxGetConnectionId(env.client) == -1:
-                            break
+            state = self.env.reset()
+            done = False
+            step = 0
+            ep_reward = 0.0
+            """
+                if not done:
+                    step += 1
+                    reward, state, done = env.norm_step(self._action(state))
+                    ep_reward += reward
+                    if step >= self.FLAGS.num_steps:
+                        done = True
+                else:
+                    vrep.simxStopSimulation(env.client,
+                                            vrep.simx_opmode_oneshot)
+                    if vrep.simxGetConnectionId(env.client) == -1:
+                        break
                 rewards[i] = ep_reward
                 steps[i] = step
-            else:
-                print("Couldn't connect to V-REP server!")
-            vrep.simxFinish(env.client)
-
+            """
         return [rewards, steps]
 
     def _action(self, state):

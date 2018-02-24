@@ -1,6 +1,6 @@
 import numpy as np
 
-from base import Base
+from environment.navigation.base import Base
 
 
 class Ideal(Base):

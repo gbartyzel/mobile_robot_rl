@@ -1,20 +1,22 @@
-class BaseNetwork(object):
+from networks.config import MODEL_CONFIG
 
-    def __init__(self, sess, network_type):
-        self.action_dim = 2
-        self.state_dim = 7
-        self.sess = sess
+
+class BaseNetwork(object):
+    def __init__(self, sess, env, network_type):
+        self._action_dim = env.action_dim
+        self._state_dim = env.observation_dim
+        self._sess = sess
 
         if network_type == 'actor':
-            self.layers = [400, 300, 300]
-            self.lrate = 1e-4
+            self._layers = MODEL_CONFIG['actor']['layers']
+            self._lrate = MODEL_CONFIG['actor']['learning_rate']
 
         if network_type == 'critic':
-            self.layers = [400, 300, 300]
-            self.lrate = 1e-3
-            self.l2 = 1e-2
+            self._layers = MODEL_CONFIG['critic']['layers']
+            self._lrate = MODEL_CONFIG['critic']['learning_rate']
+            self._l2 = MODEL_CONFIG['critic']['l2_rate']
 
-        self.tau = 1e-3
+        self._tau = MODEL_CONFIG['tau']
 
     def prediction(self, *args):
         raise NotImplementedError

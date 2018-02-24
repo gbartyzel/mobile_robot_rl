@@ -1,40 +1,83 @@
-import os
+import argparse
+import sys
 import tensorflow as tf
 
-from ddpg import DDPGAgent
-
-FLAGS = tf.app.flags.FLAGS
-
-tf.app.flags.DEFINE_bool('train', True, 'enable training')
-tf.app.flags.DEFINE_bool('test', False, 'enable test')
-tf.app.flags.DEFINE_string('model_path', 'saved_ddpg', 'path for model')
-tf.app.flags.DEFINE_string('summary_path', 'train_output', 'path for summary')
-
-tf.app.flags.DEFINE_string('env_name', 'InvertedPendulum-v1', 'environment id')
-tf.app.flags.DEFINE_integer('num_steps', 2400, 'env max steps')
-tf.app.flags.DEFINE_integer('episodes', 1000, 'max episodes')
-tf.app.flags.DEFINE_integer('x_goal', 2.0, 'goal x position')
-tf.app.flags.DEFINE_integer('y_goal', 2.0, 'goal y position')
-
-tf.app.flags.DEFINE_integer('test_episodes', 10, 'test episodes')
-tf.app.flags.DEFINE_integer('test_trials', 5, 'number of test trials')
-
-tf.app.flags.DEFINE_integer('warm_up', 10000, 'steps before training')
-tf.app.flags.DEFINE_integer('exploration', 1000000, 'max exploration steps')
-tf.app.flags.DEFINE_integer('memory_size', 1000000, 'max replay buffer size')
-tf.app.flags.DEFINE_integer('batch_size', 64, 'minibatch size')
-
-tf.app.flags.DEFINE_float('gamma', 0.99, 'discount factor')
+#from ddpg import DDPGAgent
+from environment.env import Env
+FLAGS = None
 
 
 def main(_):
+    env = Env("room", visulalization=True)
+    env.reset()
+    """
     ddpg = DDPGAgent(FLAGS)
     if FLAGS.train:
         ddpg.train()
     else:
         ddpg.play()
+    """
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--train', action='store_true', help='Enable training mode')
+    parser.add_argument(
+        '--test', action='store_true', help='Enable testing mode')
+    parser.add_argument(
+        '--model_path',
+        type=str,
+        default='saved_ddpg',
+        help='Path for model files')
+    parser.add_argument(
+        '--summary_path',
+        type=str,
+        default='train_output',
+        help='Path for Tensorboard summary')
+    parser.add_argument(
+        '--env',
+        type=str,
+        default='room',
+        help='Name of the environment to load')
+    parser.add_argument(
+        '--episodes',
+        type=int,
+        default=1000,
+        help='Max number of episodes during learning')
+    parser.add_argument(
+        '--test_episodes',
+        type=int,
+        default=10,
+        help='Frequency of model testing')
+    parser.add_argument(
+        '--trails',
+        type=int,
+        default=5,
+        help='Number of trails during testing')
+    parser.add_argument(
+        '--warm_up',
+        type=int,
+        default=10000,
+        help='Number of steps before learning starts')
+    parser.add_argument(
+        '--exploration',
+        type=int,
+        default=1000000,
+        help='Define maximum steps for exploration of the environment')
+    parser.add_argument(
+        '--memory_size',
+        type=int,
+        default=1000000,
+        help='Define maximum capacity of replay buffer')
+    parser.add_argument(
+        '--batch_size',
+        type=int,
+        default=64,
+        help='Define size of the minibatch')
+    parser.add_argument(
+        '--discount', type=float, default=0.99, help='Define discount factor')
+
     tf.reset_default_graph()
-    tf.app.run()
+    FLAGS, unparsed = parser.parse_known_args()
+    tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
