@@ -1,7 +1,7 @@
 MODEL_CONFIG = {
     'actor': {
         'layers': [400, 300, 300],
-        'lrate': 1e-4,
+        'learning_rate': 1e-4,
     },
     'critic': {
         'layers': [400, 300, 300],

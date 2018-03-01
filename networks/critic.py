@@ -21,7 +21,7 @@ class Critic(BaseNetwork):
 
         self._global_step = tf.train.get_or_create_global_step()
 
-        self._build_train_method(batch_size)
+        self._build_train_method()
         self._target_update = self._build_update_method()
 
     @property
@@ -29,7 +29,7 @@ class Critic(BaseNetwork):
         return self._global_step
 
     def gradients(self, *args):
-        return self.sess.run(
+        return self._sess.run(
             self._action_gradients,
             feed_dict={
                 self._states: args[0],
@@ -37,7 +37,7 @@ class Critic(BaseNetwork):
             })[0]
 
     def prediction(self, *args):
-        return self.sess.run(
+        return self._sess.run(
             self._output,
             feed_dict={
                 self._target_states: args[0],
@@ -45,7 +45,7 @@ class Critic(BaseNetwork):
             })
 
     def target_prediction(self, *args):
-        return self.sess.run(
+        return self._sess.run(
             self._target_output,
             feed_dict={
                 self._target_states: args[0],
@@ -53,7 +53,7 @@ class Critic(BaseNetwork):
             })
 
     def train(self, *args):
-        return self.sess.run(
+        return self._sess.run(
             [self._optim, self._loss],
             feed_dict={
                 self._states: args[0],
@@ -63,32 +63,33 @@ class Critic(BaseNetwork):
 
     def update_target_network(self, phase='soft_copy'):
         if phase == 'copy':
-            self.sess.run([
+            self._sess.run([
                 self._target_net_params[i].assign(self._net_params[i])
                 for i in range(len(self._net_params))
             ])
         else:
-            self.sess.run(self._target_update)
+            self._sess.run(self._target_update)
 
     def _build_network(self, name):
         with tf.variable_scope(name):
             with tf.variable_scope('inputs'):
                 states = tf.placeholder(tf.float32, [None, self._state_dim],
                                         'input_states')
-                actions = tf.placeholder(tf.float32, [None, self.action_dim],
+                actions = tf.placeholder(tf.float32, [None, self._action_dim],
                                          'input_actions')
 
             h_1 = fc_layer(states, 'layer_1',
-                           [self._state_dim, self.layers[0]], tf.nn.relu)
+                           [self._state_dim, self._layers[0]], tf.nn.relu)
 
             h_2 = fc_layer(
                 tf.concat([h_1, actions], 1), 'layer_2',
-                [self.layers[0] + self.action_dim, self.layers[1]], tf.nn.relu)
+                [self._layers[0] + self._action_dim, self._layers[1]],
+                tf.nn.relu)
 
-            h_3 = fc_layer(h_2, 'layer_3', [self.layers[1], self.layers[2]],
+            h_3 = fc_layer(h_2, 'layer_3', [self._layers[1], self._layers[2]],
                            tf.nn.relu)
 
-            output = fc_layer(h_3, 'output_layer', [self.layers[2], 1],
+            output = fc_layer(h_3, 'output_layer', [self._layers[2], 1],
                               tf.identity, 3e-3)
 
         net_params = tf.get_collection(
@@ -96,12 +97,12 @@ class Critic(BaseNetwork):
 
         return states, actions, output, net_params
 
-    def _build_train_method(self, batch_size):
+    def _build_train_method(self):
         with tf.variable_scope('critic_optimizer'):
             self._y = tf.placeholder(tf.float32, [None, 1], 'input_y')
 
             reg = tf.add_n(
-                [self.l2 * tf.nn.l2_loss(var) for var in self._net_params],
+                [self._l2 * tf.nn.l2_loss(var) for var in self._net_params],
                 name='l2_reg_term')
 
             self._loss = tf.add(
@@ -109,7 +110,7 @@ class Critic(BaseNetwork):
                 reg,
                 name='loss')
 
-            self._optim = tf.train.AdamOptimizer(self.lrate).minimize(
+            self._optim = tf.train.AdamOptimizer(self._lrate).minimize(
                 self._loss, global_step=self._global_step)
             self._action_gradients = tf.gradients(self._output, self._actions)
 
@@ -117,7 +118,7 @@ class Critic(BaseNetwork):
         with tf.variable_scope('critic_to_target'):
             return [
                 self._target_net_params[i].assign(
-                    tf.multiply(self._target_net_params[i], (1 - self.tau)) +
-                    tf.multiply(self.tau, self._net_params[i]))
+                    tf.multiply(self._target_net_params[i], (1 - self._tau)) +
+                    tf.multiply(self._tau, self._net_params[i]))
                 for i in range(len(self._net_params))
             ]

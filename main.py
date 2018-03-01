@@ -2,21 +2,15 @@ import argparse
 import sys
 import tensorflow as tf
 
-#from ddpg import DDPGAgent
+from ddpg import DDPGAgent
 from environment.env import Env
 FLAGS = None
 
 
 def main(_):
-    env = Env("room", visulalization=True)
-    env.reset()
-    """
     ddpg = DDPGAgent(FLAGS)
     if FLAGS.train:
         ddpg.train()
-    else:
-        ddpg.play()
-    """
 
 
 if __name__ == '__main__':
@@ -25,6 +19,12 @@ if __name__ == '__main__':
         '--train', action='store_true', help='Enable training mode')
     parser.add_argument(
         '--test', action='store_true', help='Enable testing mode')
+    parser.add_argument(
+        '--viz', action='store_true', help='Enable visulalization')
+    parser.add_argument(
+        '--norm',
+        action='store_true',
+        help='Enable normalize action and observation')
     parser.add_argument(
         '--model_path',
         type=str,
@@ -51,7 +51,7 @@ if __name__ == '__main__':
         default=10,
         help='Frequency of model testing')
     parser.add_argument(
-        '--trails',
+        '--trials',
         type=int,
         default=5,
         help='Number of trails during testing')

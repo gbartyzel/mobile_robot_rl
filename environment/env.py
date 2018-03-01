@@ -60,14 +60,17 @@ class Env(object):
     def observation_dim(self):
         return self._observation_dim
 
+    @property
+    def dt(self):
+        return self._dt
+
     def reset(self):
         vrep.simxFinish(-1)
         self._client = self._run_env()
         if self._client != -1:
             print("Connected to V-REP")
             vrep.simxSynchronous(self._client, True)
-            vrep.simxStartSimulation(self._client,
-                                     vrep.simx_opmode_oneshot_wait)
+            vrep.simxStartSimulation(self._client, vrep.simx_opmode_oneshot)
 
             self._robot, self._nav = self._spawn_robot()
             state = self._get_state()
@@ -86,7 +89,6 @@ class Env(object):
             action = self._rescale_action(action)
         self._robot.set_motor_velocities(action)
 
-        vrep.simxGetPingTime(self._client)
         vrep.simxSynchronousTrigger(self._client)
 
         next_state = self._get_state()
@@ -98,7 +100,8 @@ class Env(object):
 
     def stop(self):
         vrep.simxStopSimulation(self._client, vrep.simx_opmode_oneshot)
-        return vrep.simxGetConnectionId(self._client)
+        while vrep.simxGetConnectionId(self._client) != -1:
+            vrep.simxSynchronousTrigger(self._client)
 
     def _run_env(self):
         if self._visulalization:
@@ -152,6 +155,8 @@ class Env(object):
             angular_velocity=self._robot.get_gyroscope_values())
 
         dist = self._robot.get_proximity_values()
+        while len(dist) == 0:
+            dist = self._robot.get_proximity_values()
         error = self._nav.navigation_error
 
         return np.concatenate((dist, error))

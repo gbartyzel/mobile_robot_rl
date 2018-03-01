@@ -8,136 +8,130 @@ from networks.actor import Actor
 from networks.critic import Critic
 from utils.memory import ReplayMemory
 from utils.ounoise import OUNoise
-from vrep import vrep
 
 
 class DDPGAgent(object):
-    def __init__(self, env, FLAGS):
-        self._env = env
-        self._FLAGS = FLAGS
-        self._total_steps = 0
+    def __init__(self, FLAGS):
+        self._env = Env(
+            FLAGS.env, visulalization=FLAGS.viz, normalization=FLAGS.norm)
+        self._flags = FLAGS
 
-        self.sess = tf.InteractiveSession()
+        self._sess = tf.InteractiveSession()
 
-        self.critic = Critic(self.sess, FLAGS.batch_size)
-        self.actor = Actor(self.sess)
-        self._build_summary()
+        self._critic = Critic(self._sess, self._env)
+        self._actor = Actor(self._sess, self._env)
 
-        self.merged = tf.summary.merge_all()
-        self.writer = tf.summary.FileWriter(self.FLAGS.summary_path,
-                                            self.sess.graph)
+        self._avg_reward,\
+        self._min_reward,\
+        self._max_reward,\
+        self._avg_steps = self._build_summary()
 
-        self.sess.run(tf.global_variables_initializer())
+        self._merged = tf.summary.merge_all()
+        self._writer = tf.summary.FileWriter(self._flags.summary_path,
+                                             self._sess.graph)
 
-        self.actor.update_target_network('copy')
-        self.critic.update_target_network('copy')
+        self._sess.run(tf.global_variables_initializer())
 
-        self.saver = self._load()
-        self.ou_noise = OUNoise(action_dim=2)
+        self._actor.update_target_network('copy')
+        self._critic.update_target_network('copy')
 
-        self.memory = ReplayMemory(self.FLAGS.memory_size)
+        self._saver = self._load()
+        self._ou_noise = OUNoise(action_dim=self._env.action_dim)
 
-        self.env = Env("room")
+        self._memory = ReplayMemory(self._flags.memory_size)
+
+    def _run(self, mode):
+        ret_reward = 0.0
+        ret_step = 0
+        state = self._env.reset()
+        for step in range(self._env.max_steps):
+            if mode == 'train':
+                action = self._noise_action(state)
+            elif mode == 'test':
+                action = self._action(state)
+            reward, next_state, done = self._env.step(action)
+            self._observe(state, action, reward, next_state, done)
+            state = next_state
+            ret_reward += reward
+            ret_step = step
+            if done:
+                self._env.stop()
+                break
+
+        return ret_reward, ret_step
 
     def train(self):
-        for ep in tqdm(list(range(self.FLAGS.episodes))):
-            state = self.env.reset()
-            done = False
-            for step in range(self.env.max_steps):
-                if not done:
-                    action = self._action(state)
-                    reward, next_state, done = self.env.step(action)
-                    self._observe(state, action, reward, next_state, done)
-                    state = next_state
-                    self._total_steps += 1
-                else:
-                    if self.env.stop() == -1:
-                        break
+        for ep in tqdm(list(range(self._flags.episodes))):
+            self._run('train')
 
-            if ep % self.FLAGS.test_episodes == self.FLAGS.test_episodes - 1:
-                result = self.test()
-                print(result)
+            if ep % self._flags.test_episodes == self._flags.test_episodes - 1:
+                ret_rewards, ret_steps = self.test()
 
-                summary = self.sess.run(
-                    self.merged,
+                summary = self._sess.run(
+                    self._merged,
                     feed_dict={
-                        self.avg_reward: np.mean(result[0]),
-                        self.min_reward: np.min(result[0]),
-                        self.max_reward: np.max(result[0]),
-                        self.avg_steps: np.mean(result[1]),
+                        self._avg_reward: np.mean(ret_rewards),
+                        self._min_reward: np.min(ret_rewards),
+                        self._max_reward: np.max(ret_rewards),
+                        self._avg_steps: np.mean(ret_steps),
                     })
-                self.writer.add_summary(summary, self._total_steps)
+                self._writer.add_summary(summary,
+                                         self._critic.global_step.eval())
 
     def test(self):
-        rewards = np.zeros(self.FLAGS.test_trials)
-        steps = np.zeros(self.FLAGS.test_trials)
-        for i in range(self.FLAGS.test_trials):
-            state = self.env.reset()
-            done = False
-            step = 0
-            ep_reward = 0.0
-            """
-                if not done:
-                    step += 1
-                    reward, state, done = env.norm_step(self._action(state))
-                    ep_reward += reward
-                    if step >= self.FLAGS.num_steps:
-                        done = True
-                else:
-                    vrep.simxStopSimulation(env.client,
-                                            vrep.simx_opmode_oneshot)
-                    if vrep.simxGetConnectionId(env.client) == -1:
-                        break
-                rewards[i] = ep_reward
-                steps[i] = step
-            """
-        return [rewards, steps]
+        test_rewards = np.zeros(self._flags.trials)
+        test_steps = np.zeros(self._flags.trials)
+        for i in range(self._flags.trials):
+            test_rewards[i], test_steps[i] = self._run('test')
+        return [test_rewards, test_steps]
 
     def _action(self, state):
-        return self.actor.prediction([state])[0]
+        return self._actor.prediction([state])[0]
 
     def _noise_action(self, state):
-        noise = self.ou_noise.noise()
-        return np.clip(self.actor.prediction([state])[0] + noise, -1.0, 1.0)
+        noise = self._ou_noise.noise()
+        return np.clip(self._actor.prediction([state])[0] + noise, -1.0, 1.0)
 
     def _build_summary(self):
         with tf.variable_scope('summary'):
-            self.avg_reward = tf.placeholder(tf.float32)
-            self.min_reward = tf.placeholder(tf.float32)
-            self.max_reward = tf.placeholder(tf.float32)
-            self.avg_steps = tf.placeholder(tf.float32)
-            tf.summary.scalar('avg_reward', self.avg_reward)
-            tf.summary.scalar('max_reward', self.max_reward)
-            tf.summary.scalar('min_reward', self.min_reward)
-            tf.summary.scalar('avg_steps', self.avg_steps)
+            avg_reward = tf.placeholder(tf.float32)
+            min_reward = tf.placeholder(tf.float32)
+            max_reward = tf.placeholder(tf.float32)
+            avg_steps = tf.placeholder(tf.float32)
+            tf.summary.scalar('avg_reward', avg_reward)
+            tf.summary.scalar('max_reward', max_reward)
+            tf.summary.scalar('min_reward', min_reward)
+            tf.summary.scalar('avg_steps', avg_steps)
+
+        return avg_reward, min_reward, max_reward, avg_steps
 
     def _load(self):
         saver = tf.train.Saver()
-        checkpoint = tf.train.get_checkpoint_state(self.FLAGS.model_path)
+        checkpoint = tf.train.get_checkpoint_state(self._flags.model_path)
         if checkpoint and checkpoint.model_checkpoint_path:
-            saver.restore(self.sess, checkpoint.model_checkpoint_path)
+            saver.restore(self._sess, checkpoint.model_checkpoint_path)
             print("Successfully loaded:", checkpoint.model_checkpoint_path)
         else:
             print("Could not find old network weights")
         return saver
 
     def _observe(self, state, action, reward, next_state, done):
-        self.memory.add(state, action, reward, next_state, done)
+        self._memory.add(state, action, reward, next_state, done)
 
-        if self.memory.size >= self.FLAGS.warm_up:
+        if self._memory.size >= self._flags.warm_up:
             self._train_mini_batch()
 
-        if self._total_steps % self.FLAGS.warm_up == 0:
-            self.saver.save(
-                self.sess,
-                self.FLAGS.model_path + '/model',
-                global_step=self._total_steps)
+        if self._critic.global_step.eval() % self._flags.warm_up == 0:
+            self._saver.save(
+                self._sess,
+                self._flags.model_path + '/model',
+                global_step=self._critic.global_step)
 
         if done:
-            self.ou_noise.reset()
+            self._ou_noise.reset()
 
     def _train_mini_batch(self):
-        train_batch = self.memory.sample(self.FLAGS.batch_size)
+        train_batch = self._memory.sample(self._flags.batch_size)
 
         state_batch = np.asarray([data[0] for data in train_batch])
         action_batch = np.asarray([data[1] for data in train_batch])
@@ -146,22 +140,23 @@ class DDPGAgent(object):
         done_batch = np.asarray(
             [data[4] for data in train_batch]).astype(float)
 
-        reward_batch = np.resize(reward_batch, [self.FLAGS.batch_size, 1])
-        done_batch = np.resize(done_batch, [self.FLAGS.batch_size, 1])
+        reward_batch = np.resize(reward_batch, [self._flags.batch_size, 1])
+        done_batch = np.resize(done_batch, [self._flags.batch_size, 1])
 
-        action_batch = np.resize(action_batch, [self.FLAGS.batch_size, 2])
+        action_batch = np.resize(action_batch, [self._flags.batch_size, 2])
 
-        next_action = self.actor.target_prediction(next_state_batch)
+        next_action = self._actor.target_prediction(next_state_batch)
 
-        q_value = self.critic.target_prediction(next_state_batch, next_action)
+        q_value = self._critic.target_prediction(next_state_batch, next_action)
 
-        y_batch = (1. - done_batch) * self.FLAGS.gamma * q_value + reward_batch
+        y_batch = (
+            1. - done_batch) * self._flags.discount * q_value + reward_batch
 
-        _, loss = self.critic.train(state_batch, action_batch, y_batch)
+        _, loss = self._critic.train(state_batch, action_batch, y_batch)
 
-        gradient_actions = self.actor.prediction(state_batch)
-        q_gradients = self.critic.gradients(state_batch, gradient_actions)
-        self.actor.train(state_batch, q_gradients)
+        gradient_actions = self._actor.prediction(state_batch)
+        q_gradients = self._critic.gradients(state_batch, gradient_actions)
+        self._actor.train(state_batch, q_gradients)
 
-        self.actor.update_target_network()
-        self.critic.update_target_network()
+        self._actor.update_target_network()
+        self._critic.update_target_network()

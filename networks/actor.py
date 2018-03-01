@@ -21,19 +21,19 @@ class Actor(BaseNetwork):
         self._target_update = self._build_update_method()
 
     def prediction(self, *args):
-        return self.sess.run(
+        return self._sess.run(
             self._outputs, feed_dict={
                 self._states: args[0],
             })
 
     def target_prediction(self, *args):
-        return self.sess.run(
+        return self._sess.run(
             self._target_output, feed_dict={
                 self._target_states: args[0],
             })
 
     def train(self, *args):
-        self.sess.run(
+        self._sess.run(
             self._optim,
             feed_dict={
                 self._states: args[0],
@@ -42,12 +42,12 @@ class Actor(BaseNetwork):
 
     def update_target_network(self, phase='soft_copy'):
         if phase == 'copy':
-            self.sess.run([
+            self._sess.run([
                 self._target_net_params[i].assign(self._net_params[i])
                 for i in range(len(self._net_params))
             ])
         else:
-            self.sess.run(self._target_update)
+            self._sess.run(self._target_update)
 
     def _build_network(self, name):
         with tf.variable_scope(name):
