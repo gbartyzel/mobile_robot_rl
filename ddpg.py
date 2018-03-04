@@ -36,7 +36,10 @@ class DDPGAgent(object):
         self._critic.update_target_network('copy')
 
         self._saver = self._load()
-        self._ou_noise = OUNoise(action_dim=self._env.action_dim)
+        self._ou_noise = OUNoise(
+            action_dim=self._env.action_dim,
+            n_step_annealing=self._flags.exploration,
+            dt=self._env.dt)
 
         self._memory = ReplayMemory(self._flags.memory_size)
 
@@ -110,9 +113,9 @@ class DDPGAgent(object):
         checkpoint = tf.train.get_checkpoint_state(self._flags.model_path)
         if checkpoint and checkpoint.model_checkpoint_path:
             saver.restore(self._sess, checkpoint.model_checkpoint_path)
-            print("Successfully loaded:", checkpoint.model_checkpoint_path)
+            print('Successfully loaded:', checkpoint.model_checkpoint_path)
         else:
-            print("Could not find old network weights")
+            print('Could not find old network weights')
         return saver
 
     def _observe(self, state, action, reward, next_state, done):
@@ -137,22 +140,26 @@ class DDPGAgent(object):
         action_batch = np.asarray([data[1] for data in train_batch])
         reward_batch = np.asarray([data[2] for data in train_batch])
         next_state_batch = np.asarray([data[3] for data in train_batch])
-        done_batch = np.asarray(
-            [data[4] for data in train_batch]).astype(float)
+        done_batch = [data[4] for data in train_batch]
 
         reward_batch = np.resize(reward_batch, [self._flags.batch_size, 1])
         done_batch = np.resize(done_batch, [self._flags.batch_size, 1])
 
-        action_batch = np.resize(action_batch, [self._flags.batch_size, 2])
+        action_batch = np.resize(
+            action_batch, [self._flags.batch_size, self._env.action_dim])
 
         next_action = self._actor.target_prediction(next_state_batch)
 
         q_value = self._critic.target_prediction(next_state_batch, next_action)
+        y_batch = np.zeros((self._flags.batch_size, 1))
 
-        y_batch = (
-            1. - done_batch) * self._flags.discount * q_value + reward_batch
-
-        _, loss = self._critic.train(state_batch, action_batch, y_batch)
+        for i in range(self._flags.batch_size):
+            if done_batch[i]:
+                y_batch[i] = reward_batch[i]
+            else:
+                y_batch[i] = (
+                    self._flags.discount * q_value[i] + reward_batch[i])
+        self._critic.train(state_batch, action_batch, y_batch)
 
         gradient_actions = self._actor.prediction(state_batch)
         q_gradients = self._critic.gradients(state_batch, gradient_actions)

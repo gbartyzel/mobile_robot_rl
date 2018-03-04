@@ -16,17 +16,17 @@ from environment.vrep import vrep
 class Env(object):
     def __init__(self,
                  env_name,
-                 navigation_method="ideal",
+                 navigation_method='ideal',
                  visulalization=False,
                  normalization=False):
 
-        self._scene = ENV_SCENES[env_name]["scene_file"]
-        self._max_steps = ENV_SCENES[env_name]["steps"]
-        self._target_position = ENV_SCENES[env_name]["target_position"]
-        self._dt = ENV_SCENES[env_name]["dt"]
-        self._action_dim = ENV_SCENES[env_name]["action_dim"]
-        self._observation_dim = ENV_SCENES[env_name]["observation_dim"]
-        self._robot_model = ENV_SCENES[env_name]["robot_model"]
+        self._scene = ENV_SCENES[env_name]['scene_file']
+        self._max_steps = ENV_SCENES[env_name]['steps']
+        self._target_position = ENV_SCENES[env_name]['target_position']
+        self._dt = ENV_SCENES[env_name]['dt']
+        self._action_dim = ENV_SCENES[env_name]['action_dim']
+        self._observation_dim = ENV_SCENES[env_name]['observation_dim']
+        self._robot_model = ENV_SCENES[env_name]['robot_model']
 
         self._navigation_method = navigation_method
         self._normalization = normalization
@@ -68,7 +68,7 @@ class Env(object):
         vrep.simxFinish(-1)
         self._client = self._run_env()
         if self._client != -1:
-            print("Connected to V-REP")
+            print('Connected to V-REP')
             vrep.simxSynchronous(self._client, True)
             vrep.simxStartSimulation(self._client, vrep.simx_opmode_oneshot)
 
@@ -81,8 +81,8 @@ class Env(object):
 
             return state
         else:
-            subprocess.call("pkill vrep &", shell=True)
-            print("Couldn't connect to V-REP!")
+            subprocess.call('pkill vrep &', shell=True)
+            print('Couldn\'t connect to V-REP!')
 
     def step(self, action):
         if self._normalization:
@@ -90,6 +90,7 @@ class Env(object):
         self._robot.set_motor_velocities(action)
 
         vrep.simxSynchronousTrigger(self._client)
+        vrep.simxGetPingTime(self._client)
 
         next_state = self._get_state()
         reward, done = self._reward(next_state)
@@ -105,46 +106,48 @@ class Env(object):
 
     def _run_env(self):
         if self._visulalization:
-            vrep_exec = os.environ["V_REP"] + "vrep.sh -q "
+            vrep_exec = os.environ['V_REP'] + 'vrep.sh -q '
+            t_val = 5.0
         else:
-            vrep_exec = os.environ["V_REP"] + "vrep.sh -h -q "
-        synch_mode_cmd = "-gREMOTEAPISERVERSERVICE_20000_FALSE_TRUE "
-        scene = "./environment/scenes/" + self._scene
+            vrep_exec = os.environ['V_REP'] + 'vrep.sh -h -q '
+            t_val = 0.5
+        synch_mode_cmd = '-gREMOTEAPISERVERSERVICE_20000_FALSE_TRUE '
+        scene = './environment/scenes/' + self._scene
 
-        subprocess.call(vrep_exec + synch_mode_cmd + scene + " &", shell=True)
-        time.sleep(5.0)
-        return vrep.simxStart("127.0.0.1", 20000, True, True, 5000, 5)
+        subprocess.call(vrep_exec + synch_mode_cmd + scene + ' &', shell=True)
+        time.sleep(t_val)
+        return vrep.simxStart('127.0.0.1', 20000, True, True, 5000, 5)
 
     def _spawn_robot(self):
-        robot = Robot(self._client, self._robot_model["robot_streams"],
-                      self._robot_model["robot_objects"],
-                      self._robot_model["wheel_diameter"],
-                      self._robot_model["body_width"], self._dt,
-                      self._robot_model["min_velocity"],
-                      self._robot_model["max_velocity"])
+        robot = Robot(self._client, self._robot_model['robot_streams'],
+                      self._robot_model['robot_objects'],
+                      self._robot_model['wheel_diameter'],
+                      self._robot_model['body_width'], self._dt,
+                      self._robot_model['min_velocity'],
+                      self._robot_model['max_velocity'])
 
-        vrep.simxGetPingTime(self._client)
         vrep.simxSynchronousTrigger(self._client)
+        vrep.simxGetPingTime(self._client)
 
         for _ in range(5):
             robot.get_position()
             vrep.simxSynchronousTrigger(self._client)
 
-        if self._navigation_method == "ideal":
+        if self._navigation_method == 'ideal':
             navigation = Ideal(self._target_position,
-                               self._robot_model["wheel_diameter"],
-                               self._robot_model["body_width"], self._dt)
-        elif self._navigation_method == "odometry":
+                               self._robot_model['wheel_diameter'],
+                               self._robot_model['body_width'], self._dt)
+        elif self._navigation_method == 'odometry':
             navigation = Odometry(robot.get_position(), self._target_position,
-                                  self._robot_model["wheel_diameter"],
-                                  self._robot_model["body_width"], self._dt)
-        elif self._navigation_method == "gyrodometry":
+                                  self._robot_model['wheel_diameter'],
+                                  self._robot_model['body_width'], self._dt)
+        elif self._navigation_method == 'gyrodometry':
             navigation = Gyrodometry(robot.get_position(),
                                      self._target_position,
-                                     self._robot_model["wheel_diameter"],
-                                     self._robot_model["body_width"], self._dt)
+                                     self._robot_model['wheel_diameter'],
+                                     self._robot_model['body_width'], self._dt)
         else:
-            raise ValueError("Invalid nevigation method")
+            raise ValueError('Invalid nevigation method')
 
         return robot, navigation
 
@@ -155,8 +158,6 @@ class Env(object):
             angular_velocity=self._robot.get_gyroscope_values())
 
         dist = self._robot.get_proximity_values()
-        while len(dist) == 0:
-            dist = self._robot.get_proximity_values()
         error = self._nav.navigation_error
 
         return np.concatenate((dist, error))
@@ -170,7 +171,8 @@ class Env(object):
             done = True
             reward = -1.0
         else:
-            reward = 30 * (self._prev_error - error[0])
+            # reward = 30 * (self._prev_error - error[0])
+            reward = 1.0 - (error[0] / self._max_error)**0.5
 
         if len(self._motion_check) >= 300:
             if np.abs(np.mean(self._motion_check)) < 0.001:
@@ -202,5 +204,5 @@ class Env(object):
         return np.clip((norm_state - state_c) / state_ac, -1.0, 1.0)
 
 
-if __name__ == "__main___":
-    env = Env("room")
+if __name__ == '__main___':
+    env = Env('room')

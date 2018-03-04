@@ -11,6 +11,8 @@ def main(_):
     ddpg = DDPGAgent(FLAGS)
     if FLAGS.train:
         ddpg.train()
+    if FLAGS.test:
+        ddpg.test()
 
 
 if __name__ == '__main__':
