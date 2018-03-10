@@ -100,14 +100,8 @@ class Critic(BaseNetwork):
     def _build_train_method(self):
         with tf.variable_scope('critic_optimizer'):
             self._y = tf.placeholder(tf.float32, [None, 1], 'input_y')
-            reg = tf.add_n(
-                [self._l2 * tf.nn.l2_loss(var) for var in self._net_params],
-                name='l2_reg_term')
-
-            self._loss = tf.add(
-                tf.reduce_mean(tf.square(self._y - self._output)),
-                reg,
-                name='loss')
+            self._loss = tf.reduce_mean(
+                huber_loss(self._y, self._output, 1.0), name='loss')
             self._optim = tf.train.AdamOptimizer(self._lrate).minimize(
                 self._loss, global_step=self._global_step)
             self._action_gradients = tf.gradients(self._output, self._actions)

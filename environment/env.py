@@ -172,7 +172,7 @@ class Env(object):
             reward = -1.0
         else:
             # reward = 30 * (self._prev_error - error[0])
-            reward = 1.0 - (error[0] / self._max_error)**0.5
+            reward = (1.0 - (error[0] / self._max_error)**0.5)
 
         if len(self._motion_check) >= 300:
             if np.abs(np.mean(self._motion_check)) < 0.001:
