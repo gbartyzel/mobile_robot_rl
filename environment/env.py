@@ -1,4 +1,5 @@
 import os
+import random
 import subprocess
 import time
 
@@ -35,6 +36,7 @@ class Env(object):
         self._client = None
         self._robot = None
         self._nav = None
+        self._env_index = 0
 
         self._prev_error = 0.0
         self._max_error = 0.0
@@ -66,6 +68,11 @@ class Env(object):
 
     def reset(self):
         vrep.simxFinish(-1)
+        if len(self._scene) > 1:
+            self._env_index = random.randint(0, len(self._scene))
+        else:
+            self._env_index = 0
+
         self._client = self._run_env()
         if self._client != -1:
             print('Connected to V-REP')
@@ -112,7 +119,7 @@ class Env(object):
             vrep_exec = os.environ['V_REP'] + 'vrep.sh -h -q '
             t_val = 0.5
         synch_mode_cmd = '-gREMOTEAPISERVERSERVICE_20000_FALSE_TRUE '
-        scene = './environment/scenes/' + self._scene
+        scene = './environment/scenes/' + self._scene[self._env_index]
 
         subprocess.call(vrep_exec + synch_mode_cmd + scene + ' &', shell=True)
         time.sleep(t_val)
@@ -134,7 +141,7 @@ class Env(object):
             vrep.simxSynchronousTrigger(self._client)
 
         if self._navigation_method == 'ideal':
-            navigation = Ideal(self._target_position,
+            navigation = Ideal(self._target_position[self._env_index],
                                self._robot_model['wheel_diameter'],
                                self._robot_model['body_width'], self._dt)
         elif self._navigation_method == 'odometry':
@@ -171,7 +178,6 @@ class Env(object):
             done = True
             reward = -1.0
         else:
-            # reward = 30 * (self._prev_error - error[0])
             reward = (1.0 - (error[0] / self._max_error)**0.5)
 
         if len(self._motion_check) >= 300:
