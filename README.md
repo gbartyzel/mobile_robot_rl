@@ -25,12 +25,14 @@ To run project environment variable must be created:
 ```
 V_REP=/path_to_vrep/
 ```
+
 ### Python
 All Python dependencies are in `requirements.txt`. Just run command:
 
 ```
 pip install -r --no-cache-dir --upgrade requirements.txt
 ```
+
 
 ## Running
 To run training just run command:
@@ -51,7 +53,9 @@ For more options (like state, action normalization) run command:
 python main.py --help
 ```
 
+
 # Result
-Training was run for 1000 episodes (over 500k steps). Results are not perfect, however robot is achieving target postion.
+Training was run for 1000 episodes (over 500k steps). Robot is achieving target goal.
 
 ![alt text](./misc/output.png)
+
