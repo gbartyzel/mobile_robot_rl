@@ -48,12 +48,10 @@ class DDPGAgent(object):
         ret_step = 0
         state = self._env.reset()
         for step in range(self._env.max_steps):
-            if mode == 'train':
-                action = self._noise_action(state)
-            elif mode == 'test':
-                action = self._action(state)
+            action = self._action(state, mode)
             reward, next_state, done = self._env.step(action)
-            self._observe(state, action, reward, next_state, done)
+            if mode == 'train':
+                self._observe(state, action, reward, next_state, done)
             state = next_state
             ret_reward += reward
             ret_step = step
@@ -67,7 +65,8 @@ class DDPGAgent(object):
         for ep in tqdm(list(range(self._flags.episodes))):
             self._run('train')
 
-            if ep % self._flags.test_episodes == self._flags.test_episodes - 1:
+            if (ep % self._flags.test_episodes == self._flags.test_episodes - 1
+                    and self._memory.size >= self._flags.warm_up):
                 ret_rewards, ret_steps = self.test()
 
                 summary = self._sess.run(
@@ -88,12 +87,15 @@ class DDPGAgent(object):
             test_rewards[i], test_steps[i] = self._run('test')
         return [test_rewards, test_steps]
 
-    def _action(self, state):
-        return self._actor.prediction([state])[0]
+    def _action(self, state, mode):
+        if mode == 'train':
+            noise = self._ou_noise.noise()
+            action = np.clip(
+                self._actor.prediction([state])[0] + noise, -1.0, 1.0)
+        elif mode == 'test':
+            action = self._actor.prediction([state])[0]
 
-    def _noise_action(self, state):
-        noise = self._ou_noise.noise()
-        return np.clip(self._actor.prediction([state])[0] + noise, -1.0, 1.0)
+        return action
 
     def _build_summary(self):
         with tf.variable_scope('summary'):

@@ -117,7 +117,7 @@ class Env(object):
             t_val = 5.0
         else:
             vrep_exec = os.environ['V_REP'] + 'vrep.sh -h -q '
-            t_val = 0.5
+            t_val = 1.0
         synch_mode_cmd = '-gREMOTEAPISERVERSERVICE_20000_FALSE_TRUE '
         scene = './environment/scenes/' + self._scene[self._env_index]
 
@@ -172,13 +172,16 @@ class Env(object):
     def _reward(self, state):
         dist = state[0:5]
         error = state[5:7]
+        alpha = 0.75
+        max_ds = (self._robot_model['max_velocity'] *
+                  self._robot_model['wheel_diameter'] / 2.0 * self._dt)
         done = False
 
         if not all(i > 0.04 for i in dist):
             done = True
             reward = -1.0
         else:
-            reward = (1.0 - (error[0] / self._max_error)**0.5)
+            reward = (self._prev_error - error[0]) / max_ds * alpha
 
         if len(self._motion_check) >= 300:
             if np.abs(np.mean(self._motion_check)) < 0.001:
@@ -189,7 +192,7 @@ class Env(object):
         else:
             self._motion_check.append(self._prev_error - error[0])
 
-        if error[0] < 0.05:
+        if error[0] < 0.02:
             print('Target reached!')
             done = True
             reward = 1.0

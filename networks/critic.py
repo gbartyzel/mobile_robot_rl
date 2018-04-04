@@ -86,10 +86,10 @@ class Critic(BaseNetwork):
                 [self._layers[0] + self._action_dim, self._layers[1]],
                 tf.nn.relu)
 
-            h_3 = fc_layer(h_2, 'layer_3', [self._layers[1], self._layers[2]],
-                           tf.nn.relu)
+            # h_3 = fc_layer(h_2, 'layer_3', [self._layers[1], self._layers[2]],
+            #                tf.nn.relu)
 
-            output = fc_layer(h_3, 'output_layer', [self._layers[2], 1],
+            output = fc_layer(h_2, 'output_layer', [self._layers[1], 1],
                               tf.identity, 3e-4)
 
         net_params = tf.get_collection(
@@ -100,8 +100,21 @@ class Critic(BaseNetwork):
     def _build_train_method(self):
         with tf.variable_scope('critic_optimizer'):
             self._y = tf.placeholder(tf.float32, [None, 1], 'input_y')
+            reg = tf.add_n(
+                [
+                    self._l2 * tf.nn.l2_loss(var) for var in self._net_params
+                    if 'weight' in var.name
+                ],
+                name='l2_reg_term')
+
+            self._loss = tf.add(
+                tf.reduce_mean(tf.square(self._y - self._output)),
+                reg,
+                name='loss')
+            """
             self._loss = tf.reduce_mean(
                 huber_loss(self._y, self._output, 1.0), name='loss')
+            """
             self._optim = tf.train.AdamOptimizer(self._lrate).minimize(
                 self._loss, global_step=self._global_step)
             self._action_gradients = tf.gradients(self._output, self._actions)

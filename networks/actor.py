@@ -61,11 +61,11 @@ class Actor(BaseNetwork):
             h_2 = fc_layer(h_1, 'layer_2', [self._layers[0], self._layers[1]],
                            tf.nn.relu)
 
-            h_3 = fc_layer(h_2, 'layer_3', [self._layers[1], self._layers[2]],
-                           tf.nn.relu)
+            # h_3 = fc_layer(h_2, 'layer_3', [self._layers[1], self._layers[2]],
+            #                tf.nn.relu)
 
-            output = fc_layer(h_3, 'output_layer',
-                              [self._layers[2], self._action_dim], tf.tanh,
+            output = fc_layer(h_2, 'output_layer',
+                              [self._layers[1], self._action_dim], tf.tanh,
                               3e-3)
 
         net_params = tf.get_collection(

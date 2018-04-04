@@ -37,14 +37,14 @@ def noisy_layer(x, name, shape, act_fn=None):
 
         with tf.variable_scope('weight'):
             w_epsilon = noise_func(noise_i) * noise_func(noise_j)
-            w_mu = tf.get_variable('w_mu', shape, tf.float32, mu_init)
-            w_sigma = tf.get_variable('w_sigma', shape, tf.float32, sigma_init)
+            w_mu = tf.get_variable('mean', shape, tf.float32, mu_init)
+            w_sigma = tf.get_variable('sigma', shape, tf.float32, sigma_init)
             w = tf.add(w_mu, tf.multiply(w_sigma, w_epsilon))
 
         with tf.variable_scope('bias'):
             b_epsilon = tf.squeeze(noise_func(noise_j))
-            b_mu = tf.get_variable('b_mu', [shape[1]], tf.float32, mu_init)
-            b_sigma = tf.get_variable('b_sigma', [shape[1]], tf.float32,
+            b_mu = tf.get_variable('mean', [shape[1]], tf.float32, mu_init)
+            b_sigma = tf.get_variable('sigma', [shape[1]], tf.float32,
                                       sigma_init)
             b = tf.add(b_mu, tf.multiply(b_sigma, b_epsilon))
 

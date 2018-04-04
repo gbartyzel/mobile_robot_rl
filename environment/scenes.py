@@ -19,6 +19,7 @@ ROBOT_MODEL = {
     }
 }
 
+
 def square_goals():
     step_size = 0.05
     width = 8.0
@@ -27,26 +28,29 @@ def square_goals():
 
     angles = np.arange(0.0, 2 * np.pi + step_size, step_size)
     x_es = np.reshape(4 * (np.abs(np.cos(angles)) * np.cos(angles) +
-        np.abs(np.sin(angles)) * np.sin(angles)) - 2.0, (-1, 1))
+                           np.abs(np.sin(angles)) * np.sin(angles)) - 2.0,
+                      (-1, 1))
     y_es = np.reshape(4 * (np.abs(np.cos(angles)) * np.cos(angles) -
-        np.abs(np.sin(angles)) * np.sin(angles)) - 2.0, (-1, 1))
+                           np.abs(np.sin(angles)) * np.sin(angles)) - 2.0,
+                      (-1, 1))
 
     return np.round(np.append(x_es, y_es, axis=1), 2).tolist()
 
+
 ENV_SCENES = {
     'no_obstacles': {
-        'scene_file': ('no_obstacles.ttt',)*len(square_goals()),
-        'target_position': square_goals(), 
-        'steps': 2400,
+        'scene_file': ('no_obstacles.ttt', ) * len(square_goals()),
+        'target_position': square_goals(),
+        'steps': 1200,
         'dt': 0.05,
         'action_dim': 2,
         'observation_dim': 7,
         'robot_model': ROBOT_MODEL,
     },
     'room': {
-        'scene_file': ('room.ttt',),
-        'target_position': ((2.0, 2.0),),
-        'steps': 2400,
+        'scene_file': ('room.ttt', ),
+        'target_position': ((2.0, 2.0), ),
+        'steps': 1200,
         'dt': 0.05,
         'action_dim': 2,
         'observation_dim': 7,
@@ -58,7 +62,7 @@ ENV_SCENES = {
         'target_position': ((2.0, 2.0), (2.0, -2.0), (-2.0, -2.0), (-2.0,
                                                                     2.0)),
         'steps':
-        2400,
+        1200,
         'dt':
         0.05,
         'action_dim':
@@ -69,9 +73,9 @@ ENV_SCENES = {
         ROBOT_MODEL,
     },
     'moving_obstacles': {
-        'scene_file': ('moving_obstacles.ttt',),
-        'target_position': ((2.0, 2.0),),
-        'steps': 2400,
+        'scene_file': ('moving_obstacles.ttt', ),
+        'target_position': ((2.0, 2.0), ),
+        'steps': 1200,
         'dt': 0.05,
         'action_dim': 2,
         'observation_dim': 7,
