@@ -22,34 +22,37 @@ def fc_layer(x, name, shape, act_fn=None, val=None, xavier=False):
         return output
 
 
-def noisy_layer(x, name, shape, act_fn=None):
+def noisy_layer(x, shape, activation=None, name='noisy'):
+    x_shape = x.get_shape().as_list()[1]
+
     def noise_func(x_):
         return tf.multiply(tf.sign(x_), tf.sqrt(tf.abs(x_)))
 
-    mu_val = 1 / np.sqrt(shape[0])
+    mu_val = 1 / np.sqrt(x_shape)
     mu_init = tf.random_uniform_initializer(-mu_val, mu_val, dtype=tf.float32)
-    sigma_val = 0.4 / np.sqrt(shape[0])
+    sigma_val = 0.4 / np.sqrt(x_shape)
     sigma_init = tf.constant_initializer(sigma_val, dtype=tf.float32)
 
     with tf.variable_scope(name):
-        noise_i = tf.random_normal([shape[0], 1])
-        noise_j = tf.random_normal([1, shape[1]])
+        noise_i = tf.random_normal([x_shape, 1])
+        noise_j = tf.random_normal([1, shape])
 
-        with tf.variable_scope('weight'):
+        with tf.variable_scope('kernel'):
             w_epsilon = noise_func(noise_i) * noise_func(noise_j)
-            w_mu = tf.get_variable('mean', shape, tf.float32, mu_init)
-            w_sigma = tf.get_variable('sigma', shape, tf.float32, sigma_init)
+            w_mu = tf.get_variable(
+                'mean', [x_shape, shape], tf.float32, mu_init)
+            w_sigma = tf.get_variable(
+                'sigma', [x_shape, shape], tf.float32, sigma_init)
             w = tf.add(w_mu, tf.multiply(w_sigma, w_epsilon))
 
         with tf.variable_scope('bias'):
             b_epsilon = tf.squeeze(noise_func(noise_j))
-            b_mu = tf.get_variable('mean', [shape[1]], tf.float32, mu_init)
-            b_sigma = tf.get_variable('sigma', [shape[1]], tf.float32,
-                                      sigma_init)
+            b_mu = tf.get_variable('mean', [shape], tf.float32, mu_init)
+            b_sigma = tf.get_variable('sigma', [shape], tf.float32, sigma_init)
             b = tf.add(b_mu, tf.multiply(b_sigma, b_epsilon))
 
-        if act_fn:
-            output = act_fn(tf.add(tf.matmul(x, w), b))
+        if activation:
+            output = activation(tf.add(tf.matmul(x, w), b))
         else:
             output = tf.add(tf.matmul(x, w), b)
 
