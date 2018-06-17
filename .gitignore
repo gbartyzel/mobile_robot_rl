@@ -1,5 +1,4 @@
-train_output/
-saved_ddpg/
+output/
 __pycache__/
 *.pyc
 .idea/
