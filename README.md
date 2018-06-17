@@ -55,7 +55,7 @@ python main.py --help
 
 
 # Result
-Training was run for 1000 episodes (over 500k steps). Robot is achieving target goal.
+Training for both algorithms was run for over 250k steps.
 
 ![alt text](./misc/output.png)
 
