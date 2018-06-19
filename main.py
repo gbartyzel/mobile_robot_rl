@@ -69,7 +69,7 @@ def training(env, agent, logger, nb_episodes, nb_eval_episodes, nb_trials):
     reward_for_save = 0.0
     for ep in tqdm(range(nb_episodes)):
         ep_r, ep_q, ep_step = play_env(env, agent, True)
-        logger.train_writer(ep_r, ep_q, ep_step, agent.global_step)
+        logger.writer(ep_r, ep_q, ep_step, agent.global_step, False)
         if ep % nb_eval_episodes == 0:
             train_r = []
             train_q = []
@@ -79,8 +79,8 @@ def training(env, agent, logger, nb_episodes, nb_eval_episodes, nb_trials):
                 train_r.append(r)
                 train_q.append(q)
                 train_step.append(step)
-            logger.test_writer(
-                train_r, np.hstack(train_q), train_step, agent.global_step)
+            logger.writer(train_r, np.hstack(train_q), train_step,
+                          agent.global_step, True)
 
             if np.mean(train_r) > reward_for_save:
                 info = "Saved model, global step {}, test reward {}".format(
@@ -131,4 +131,3 @@ if __name__ == '__main__':
     tf.reset_default_graph()
     args = parser_setup()
     main(**args)
-
