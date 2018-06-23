@@ -3,7 +3,10 @@ import tensorflow as tf
 
 from networks import Actor
 from networks import Critic
-import rl_common as U
+
+import utills.opts as U
+from utills.ounoise import OUNoise
+from utills.memory import ReplayMemory
 
 
 class DDPG(object):
@@ -27,9 +30,9 @@ class DDPG(object):
 
         self._global_step = tf.train.get_or_create_global_step()
 
-        self.ou_noise = U.OUNoise(dim=dimu, n_step_annealing=exploration,
-                                  dt=env_dt)
-        self._memory = U.ReplayMemory(memory_size)
+        self.ou_noise = OUNoise(dim=dimu, n_step_annealing=exploration,
+                                dt=env_dt)
+        self._memory = ReplayMemory(memory_size)
 
         with tf.variable_scope('inputs'):
             self._obs = tf.placeholder(
@@ -82,7 +85,7 @@ class DDPG(object):
         if not self._noisy:
             pi[0] += self.ou_noise.noise()
         clip_pi = np.clip(pi[0], -1.0, 1.0)
-        scaled_pi = U.scaling_np(
+        scaled_pi = U.scaling(
             clip_pi, -1.0, 1.0, self._u_bound['low'], self._u_bound['high'])
         return scaled_pi.copy(), q[0].copy()
 
@@ -91,7 +94,7 @@ class DDPG(object):
             [self._actor.pi, self._critic_pi.Q], feed_dict={
                 self._obs: [state],
             })
-        scaled_pi = U.scaling_np(
+        scaled_pi = U.scaling(
             pi[0], -1.0, 1.0, self._u_bound['low'], self._u_bound['high'])
         return scaled_pi.copy(), q[0].copy()
 

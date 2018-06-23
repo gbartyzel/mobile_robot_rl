@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-import rl_common as U
+import utills.opts as U
 
 
 class Base(object):

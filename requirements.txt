@@ -3,4 +3,3 @@ tensorflow-gpu>=1.5
 tqdm
 gym>=0.10
 git+https://github.com/Souphis/gym-vrep.git
-git+https://github.com/Souphis/rl_common.git

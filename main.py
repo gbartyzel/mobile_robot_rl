@@ -6,7 +6,7 @@ import gym_vrep
 import numpy as np
 import tensorflow as tf
 
-import rl_common as U
+from utills.logger import env_logger, Logger
 
 from ddpg import DDPG
 from tqdm import tqdm
@@ -69,7 +69,7 @@ def training(env, agent, logger, nb_episodes, nb_eval_episodes, nb_trials):
     reward_for_save = 0.0
     for ep in tqdm(range(nb_episodes)):
         ep_r, ep_q, ep_step = play_env(env, agent, True)
-        logger.writer(ep_r, ep_q, ep_step, agent.global_step, False)
+        logger.writer(ep_r, ep_q, ep_step)
         if ep % nb_eval_episodes == 0:
             train_r = []
             train_q = []
@@ -79,8 +79,7 @@ def training(env, agent, logger, nb_episodes, nb_eval_episodes, nb_trials):
                 train_r.append(r)
                 train_q.append(q)
                 train_step.append(step)
-            logger.writer(train_r, np.hstack(train_q), train_step,
-                          agent.global_step, True)
+            logger.writer(train_r, np.hstack(train_q), train_step, True)
 
             if np.mean(train_r) > reward_for_save:
                 info = "Saved model, global step {}, test reward {}".format(
@@ -94,7 +93,7 @@ def main(env_id, train, play, logdir, **kwargs):
     sess = tf.InteractiveSession()
     env = gym.make(env_id)
 
-    U.env_logger(env)
+    env_logger(env)
 
     dimu = env.action_space.shape[0]
     dimo = env.observation_space.shape[0]
@@ -110,7 +109,7 @@ def main(env_id, train, play, logdir, **kwargs):
             kwargs.pop(key)
 
     agent = DDPG(sess, dimo, dimu, u_bound=u_bound, **ddpg_kwargs)
-    logger = U.Logger(sess, agent, logdir)
+    logger = Logger(sess, agent, logdir)
 
     sess.run(tf.global_variables_initializer())
 
