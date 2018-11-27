@@ -64,6 +64,7 @@ def noisy_layer(x, shape, activation=None, name=None, is_training=True,
     :param x: input tensor
     :param shape: integer, output shape of layer
     :param activation: activation function of the layer
+    :param is_training, boolean
     :param name: string, name of the layer
     :param reuse: boolean, whether to reuse the weights of a previous layer
     by the same name
@@ -93,16 +94,14 @@ def noisy_layer(x, shape, activation=None, name=None, is_training=True,
             w_sigma = tf.get_variable(
                 'sigma', [x_shape, shape], tf.float32, sigma_init)
             w = tf.add(
-                w_mu,
-                tf.where(is_training, tf.multiply(w_sigma, w_eps), w_sigma))
+                w_mu, tf.where(is_training, tf.multiply(w_sigma, w_eps), 0.0))
 
         with tf.variable_scope('bias'):
             b_eps = tf.squeeze(noise_func(noise_j))
             b_mu = tf.get_variable('mean', [shape], tf.float32, mu_init)
             b_sigma = tf.get_variable('sigma', [shape], tf.float32, sigma_init)
             b = tf.add(
-                b_mu,
-                tf.where(is_training, tf.multiply(b_sigma, b_eps), b_sigma))
+                b_mu, tf.where(is_training, tf.multiply(b_sigma, b_eps), 0.0))
 
         if activation:
             output = activation(tf.add(tf.matmul(x, w), b))
