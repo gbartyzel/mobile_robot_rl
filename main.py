@@ -7,7 +7,6 @@ import numpy as np
 import tensorflow as tf
 
 from utills.logger import env_logger, Logger
-from utills.opts import scaling
 
 from ddpg import DDPG
 from tqdm import tqdm
@@ -50,15 +49,16 @@ def play_env(env, agent, train=False):
     if not train:
         env.seed()
     s_t = env.reset()
+    a_t, q_t = agent.act_noisy(s_t) if train else agent.act(s_t)
+
     for i in range(env._max_episode_steps):
         step = i
-        if train:
-            a_t, q_t = agent.act_noisy(s_t)
-        else:
-            a_t, q_t = agent.act(s_t)
         s_t_1, r_t, d_t, _ = env.step(a_t)
         if train:
             agent.observe(s_t, a_t, r_t, s_t_1, d_t)
+            a_t, q_t = agent.act_noisy(s_t)
+        else:
+            a_t, q_t = agent.act(s_t)
         s_t = s_t_1
         rewards += r_t
         qs.append(q_t)

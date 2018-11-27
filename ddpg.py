@@ -33,7 +33,7 @@ class DDPG(object):
         self._global_step = tf.train.get_or_create_global_step()
 
         self.ou_noise = OUNoise(
-            dim=dimu, mu=0.5, n_step_annealing=exploration, dt=env_dt)
+            dim=dimu, n_step_annealing=exploration, dt=env_dt)
         self._memory = ReplayMemory(memory_size)
 
         with tf.variable_scope('inputs'):
@@ -83,7 +83,7 @@ class DDPG(object):
         return (self._target_critic.trainable_vars +
                 self._target_actor.trainable_vars)
 
-    def act_noisy(self, state, ):
+    def act_noisy(self, state):
         pi, q = self._sess.run(
             [self._actor.pi, self._critic_pi.Q], feed_dict={
                 self._obs: [state],

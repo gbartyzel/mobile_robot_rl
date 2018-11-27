@@ -55,16 +55,15 @@ def dense(x, name, shape, weight_init=None, bias_init=None, weight_reg=None,
         return tf.add(tf.matmul(x, w), b)
 
 
-def noisy_layer(x, shape, activation=None, name=None, is_training=True,
-                reuse=None):
+def noisy_layer(x, shape, is_training, activation=None, name=None, reuse=None):
     """
     Noisy layer for exploration https://arxiv.org/pdf/1706.10295.pdf.
     Create linear layer of shape n x m, where n is shape of input tensor,
     and m is defined by shape argument.
     :param x: input tensor
     :param shape: integer, output shape of layer
-    :param activation: activation function of the layer
     :param is_training, boolean
+    :param activation: activation function of the layer
     :param name: string, name of the layer
     :param reuse: boolean, whether to reuse the weights of a previous layer
     by the same name
@@ -93,15 +92,15 @@ def noisy_layer(x, shape, activation=None, name=None, is_training=True,
                 'mean', [x_shape, shape], tf.float32, mu_init)
             w_sigma = tf.get_variable(
                 'sigma', [x_shape, shape], tf.float32, sigma_init)
-            w = tf.add(
-                w_mu, tf.where(is_training, tf.multiply(w_sigma, w_eps), 0.0))
+            w = tf.where(
+                is_training, tf.add(w_mu, tf.multiply(w_sigma, w_eps)), w_mu)
 
         with tf.variable_scope('bias'):
             b_eps = tf.squeeze(noise_func(noise_j))
             b_mu = tf.get_variable('mean', [shape], tf.float32, mu_init)
             b_sigma = tf.get_variable('sigma', [shape], tf.float32, sigma_init)
-            b = tf.add(
-                b_mu, tf.where(is_training, tf.multiply(b_sigma, b_eps), 0.0))
+            b = tf.where(
+                is_training, tf.add(b_mu, tf.multiply(b_sigma, b_eps)), b_mu)
 
         if activation:
             output = activation(tf.add(tf.matmul(x, w), b))

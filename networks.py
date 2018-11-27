@@ -44,8 +44,7 @@ class Actor(Base):
         for i, layer in enumerate(layers):
             with tf.variable_scope('layer_{}'.format(i)):
                 if noisy_layer:
-                    out = U.noisy_layer(
-                        out, layer, is_training=self.is_training)
+                    out = U.noisy_layer(out, layer, self.is_training)
                 else:
                     val = 1 / np.sqrt(out.get_shape().as_list()[1])
                     init = tf.truncated_normal_initializer(stddev=val)
@@ -58,8 +57,7 @@ class Actor(Base):
 
         if noisy_layer:
             out = U.noisy_layer(
-                out, self._dimu, is_training=self.is_training,
-                name='output_layer')
+                out, self._dimu, self.is_training, name='output_layer')
         else:
             init = tf.random_uniform_initializer(-3e-3, 3e-3)
             out = tf.layers.dense(out, self._dimu, kernel_initializer=init,
@@ -91,8 +89,7 @@ class Critic(Base):
                 if i == 1:
                     out = tf.concat((out, self.u), axis=1)
                 if noisy_layer:
-                    out = U.noisy_layer(
-                        out, layer, is_training=self.is_trainig)
+                    out = U.noisy_layer(out, layer, self.is_trainig)
                 else:
                     val = 1 / np.sqrt(out.get_shape().as_list()[1])
                     init = tf.truncated_normal_initializer(stddev=val)
@@ -104,8 +101,7 @@ class Critic(Base):
                 out = tf.nn.relu(out)
 
         if noisy_layer:
-            out = U.noisy_layer(out, 1, name='output_layer',
-                                is_training=self.is_trainig)
+            out = U.noisy_layer(out, 1, self.is_trainig, name='output_layer')
         else:
             init = tf.random_uniform_initializer(-3e-3, 3e-3)
             out = tf.layers.dense(out, 1, kernel_initializer=init,
