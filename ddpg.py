@@ -83,7 +83,7 @@ class DDPG(object):
         return (self._target_critic.trainable_vars +
                 self._target_actor.trainable_vars)
 
-    def noisy_action(self, state, ):
+    def act_noisy(self, state, ):
         pi, q = self._sess.run(
             [self._actor.pi, self._critic_pi.Q], feed_dict={
                 self._obs: [state],
@@ -96,7 +96,7 @@ class DDPG(object):
             pi, 0.0, 1.0, self._u_bound['low'], self._u_bound['high'])
         return pi.copy(), q[0].copy()
 
-    def action(self, state):
+    def act(self, state):
         pi, q = self._sess.run(
             [self._actor.pi, self._critic_pi.Q], feed_dict={
                 self._obs: [state],

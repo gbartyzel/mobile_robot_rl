@@ -53,9 +53,9 @@ def play_env(env, agent, train=False):
     for i in range(env._max_episode_steps):
         step = i
         if train:
-            a_t, q_t = agent.noisy_action(s_t)
+            a_t, q_t = agent.act_noisy(s_t)
         else:
-            a_t, q_t = agent.action(s_t)
+            a_t, q_t = agent.act(s_t)
         s_t_1, r_t, d_t, _ = env.step(a_t)
         if train:
             agent.observe(s_t, a_t, r_t, s_t_1, d_t)
