@@ -25,12 +25,13 @@ class Base(object):
 
 
 class Actor(Base):
-    def __init__(self, name, obs, dimu, layer_norm=False,
+    def __init__(self, name, obs, dimu, is_training, layer_norm=False,
                  noisy_layer=False, reuse=None):
         super(Actor, self).__init__('actor', name)
 
         self.obs = obs
         self._dimu = dimu
+        self.is_training = is_training
         with tf.variable_scope(self.name) as vs:
             if reuse:
                 vs.reuse_variables()
@@ -39,11 +40,12 @@ class Actor(Base):
     def _build_network(self, layer_norm, noisy_layer, reuse):
         out = self.obs
 
-        layers = (100, 80, )
+        layers = (100, 80,)
         for i, layer in enumerate(layers):
             with tf.variable_scope('layer_{}'.format(i)):
                 if noisy_layer:
-                    out = U.noisy_layer(out, layer)
+                    out = U.noisy_layer(
+                        out, layer, is_training=self.is_training)
                 else:
                     val = 1 / np.sqrt(out.get_shape().as_list()[1])
                     init = tf.truncated_normal_initializer(stddev=val)
@@ -56,24 +58,25 @@ class Actor(Base):
 
         if noisy_layer:
             out = U.noisy_layer(
-                out, self._dimu, name='output_layer')
+                out, self._dimu, is_training=self.is_training,
+                name='output_layer')
         else:
             init = tf.random_uniform_initializer(-3e-3, 3e-3)
             out = tf.layers.dense(out, self._dimu, kernel_initializer=init,
                                   name='output_layer')
-        out = tf.tanh(out)
+        out = tf.sigmoid(out)
 
         return out
 
 
 class Critic(Base):
-
-    def __init__(self, name, obs, u, layer_norm=False,
+    def __init__(self, name, obs, u, is_training, layer_norm=False,
                  noisy_layer=False, reuse=None):
         super(Critic, self).__init__('critic', name)
 
         self.obs = obs
         self.u = u
+        self.is_trainig = is_training
         with tf.variable_scope(self.name) as vs:
             if reuse:
                 vs.reuse_variables()
@@ -82,13 +85,14 @@ class Critic(Base):
     def _build_network(self, layer_norm, noisy_layer, reuse):
         out = self.obs
 
-        layers = (100, 80, )
+        layers = (100, 80,)
         for i, layer in enumerate(layers):
             with tf.variable_scope('layer_{}'.format(i)):
                 if i == 1:
                     out = tf.concat((out, self.u), axis=1)
                 if noisy_layer:
-                    out = U.noisy_layer(out, layer)
+                    out = U.noisy_layer(
+                        out, layer, is_training=self.is_trainig)
                 else:
                     val = 1 / np.sqrt(out.get_shape().as_list()[1])
                     init = tf.truncated_normal_initializer(stddev=val)
@@ -100,7 +104,8 @@ class Critic(Base):
                 out = tf.nn.relu(out)
 
         if noisy_layer:
-            out = U.noisy_layer(out, 1, name='output_layer')
+            out = U.noisy_layer(out, 1, name='output_layer',
+                                is_training=self.is_trainig)
         else:
             init = tf.random_uniform_initializer(-3e-3, 3e-3)
             out = tf.layers.dense(out, 1, kernel_initializer=init,

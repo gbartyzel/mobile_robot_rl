@@ -4,7 +4,6 @@ import tensorflow as tf
 
 # ***********TensorFlow helper functions*********** #
 
-
 def scaling(x, u_min, u_max, t_min=-1.0, t_max=1.0):
     """
     Scale tensor or ndarray to specific value range
@@ -56,7 +55,8 @@ def dense(x, name, shape, weight_init=None, bias_init=None, weight_reg=None,
         return tf.add(tf.matmul(x, w), b)
 
 
-def noisy_layer(x, shape, activation=None, name=None, reuse=None):
+def noisy_layer(x, shape, activation=None, name=None, is_training=True,
+                reuse=None):
     """
     Noisy layer for exploration https://arxiv.org/pdf/1706.10295.pdf.
     Create linear layer of shape n x m, where n is shape of input tensor,
@@ -79,7 +79,7 @@ def noisy_layer(x, shape, activation=None, name=None, reuse=None):
 
     mu_val = 1 / np.sqrt(x_shape)
     mu_init = tf.random_uniform_initializer(-mu_val, mu_val, dtype=tf.float32)
-    sigma_val = 0.4 / np.sqrt(x_shape)
+    sigma_val = 0.5 / np.sqrt(x_shape)
     sigma_init = tf.constant_initializer(sigma_val, dtype=tf.float32)
 
     with tf.variable_scope(name, reuse=reuse):
@@ -87,18 +87,22 @@ def noisy_layer(x, shape, activation=None, name=None, reuse=None):
         noise_j = tf.random_normal([1, shape])
 
         with tf.variable_scope('kernel'):
-            w_epsilon = noise_func(noise_i) * noise_func(noise_j)
+            w_eps = noise_func(noise_i) * noise_func(noise_j)
             w_mu = tf.get_variable(
                 'mean', [x_shape, shape], tf.float32, mu_init)
             w_sigma = tf.get_variable(
                 'sigma', [x_shape, shape], tf.float32, sigma_init)
-            w = tf.add(w_mu, tf.multiply(w_sigma, w_epsilon))
+            w = tf.add(
+                w_mu,
+                tf.where(is_training, tf.multiply(w_sigma, w_eps), w_sigma))
 
         with tf.variable_scope('bias'):
-            b_epsilon = tf.squeeze(noise_func(noise_j))
+            b_eps = tf.squeeze(noise_func(noise_j))
             b_mu = tf.get_variable('mean', [shape], tf.float32, mu_init)
             b_sigma = tf.get_variable('sigma', [shape], tf.float32, sigma_init)
-            b = tf.add(b_mu, tf.multiply(b_sigma, b_epsilon))
+            b = tf.add(
+                b_mu,
+                tf.where(is_training, tf.multiply(b_sigma, b_eps), b_sigma))
 
         if activation:
             output = activation(tf.add(tf.matmul(x, w), b))

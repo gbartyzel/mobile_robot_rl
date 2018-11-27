@@ -7,6 +7,7 @@ import numpy as np
 import tensorflow as tf
 
 from utills.logger import env_logger, Logger
+from utills.opts import scaling
 
 from ddpg import DDPG
 from tqdm import tqdm
@@ -18,8 +19,8 @@ def parser_setup():
     parser.add_argument('--play', action='store_true')
     parser.add_argument('--logdir', type=str, default='output')
     parser.add_argument('--env_id', type=str,
-                        default='VrepMobileRobotIdealNavigation-v0')
-    parser.add_argument('--env_dt', type=float, default=5e-2)
+                        default='MobileRobotIdealNavigation-v0')
+    parser.add_argument('--env_dt', type=float, default=0.05)
     parser.add_argument('--nb_episodes', type=int, default=10000)
     parser.add_argument('--nb_eval_episodes', type=int, default=10)
     parser.add_argument('--nb_trials', type=int, default=5)
@@ -31,9 +32,10 @@ def parser_setup():
     parser.add_argument('--critic_l2', type=float, default=1e-2)
     parser.add_argument('--actor_lr', type=float, default=1e-4)
     parser.add_argument('--clip_norm', type=float, default=0.0)
-    parser.add_argument('--tau', type=float, default=1e-3)
+    parser.add_argument('--tau', type=float, default=0.05)
     parser.add_argument('--layer_norm', action='store_true')
     parser.add_argument('--noisy_layer', action='store_true')
+    parser.add_argument('--norm', action='store_true')
 
     args = parser.parse_args()
     dict_args = vars(args)
@@ -45,6 +47,8 @@ def play_env(env, agent, train=False):
     qs = []
     rewards = 0.0
     step = 0.0
+    if not train:
+        env.seed()
     s_t = env.reset()
     for i in range(env._max_episode_steps):
         step = i
@@ -101,6 +105,10 @@ def main(env_id, train, play, logdir, **kwargs):
         'low': env.action_space.low,
         'high': env.action_space.high,
     }
+    o_bound = {
+        'low': env.observation_space.low,
+        'high': env.observation_space.high,
+    }
     sig = inspect.signature(DDPG)
     ddpg_kwargs = dict()
     for key in sig.parameters:
@@ -108,7 +116,8 @@ def main(env_id, train, play, logdir, **kwargs):
             ddpg_kwargs[key] = kwargs[key]
             kwargs.pop(key)
 
-    agent = DDPG(sess, dimo, dimu, u_bound=u_bound, **ddpg_kwargs)
+    agent = DDPG(sess, dimo, dimu, o_bound=o_bound, u_bound=u_bound,
+                 **ddpg_kwargs)
     logger = Logger(sess, agent, logdir)
 
     sess.run(tf.global_variables_initializer())

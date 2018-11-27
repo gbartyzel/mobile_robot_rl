@@ -10,9 +10,9 @@ from utills.memory import ReplayMemory
 
 
 class DDPG(object):
-    def __init__(self, sess, dimo, dimu, u_bound, critic_lr, actor_lr,
+    def __init__(self, sess, dimo, dimu, o_bound, u_bound, critic_lr, actor_lr,
                  critic_l2, clip_norm, tau, layer_norm, noisy_layer, gamma,
-                 memory_size, exploration, batch_size, env_dt):
+                 memory_size, exploration, batch_size, env_dt, norm):
         self._sess = sess
 
         self._dimo = dimo
@@ -27,14 +27,17 @@ class DDPG(object):
         self._tau = tau
         self._batch_size = batch_size
         self._u_bound = u_bound
+        self._o_bound = o_bound
+        self._norm = norm
 
         self._global_step = tf.train.get_or_create_global_step()
 
-        self.ou_noise = OUNoise(dim=dimu, n_step_annealing=exploration,
-                                dt=env_dt)
+        self.ou_noise = OUNoise(
+            dim=dimu, mu=0.5, n_step_annealing=exploration, dt=env_dt)
         self._memory = ReplayMemory(memory_size)
 
         with tf.variable_scope('inputs'):
+            self._is_training = tf.placeholder(tf.bool, name='is_training')
             self._obs = tf.placeholder(
                 tf.float32, [None, self._dimo], name='state')
             self._u = tf.placeholder(
@@ -44,22 +47,25 @@ class DDPG(object):
 
         with tf.variable_scope('actor'):
             self._actor = Actor(
-                'main', self._obs, dimu, layer_norm, noisy_layer)
+                'main', self._obs, dimu, self._is_training, layer_norm,
+                noisy_layer)
             self._target_actor = Actor(
-                'target', self._t_obs, dimu, layer_norm, noisy_layer)
+                'target', self._t_obs, dimu, self._is_training, layer_norm,
+                noisy_layer)
 
         with tf.variable_scope('critic'):
             self._critic = Critic(
-                'main', self._obs, self._u, layer_norm, noisy_layer)
+                'main', self._obs, self._u, self._is_training, layer_norm,
+                noisy_layer)
             self._critic_pi = Critic(
                 'main', self._obs, U.scaling(
-                    self._actor.pi, -1.0, 1.0, self._u_bound['low'],
-                    self._u_bound['high']),
-                layer_norm, noisy_layer, reuse=True)
+                    self._actor.pi, 0.0, 1.0, u_bound['low'], u_bound['high']),
+                self._is_training, layer_norm, noisy_layer, reuse=True)
             self._target_critic = Critic(
-                'target', self._t_obs, U.scaling(
-                    self._target_actor.pi, -1.0, 1.0, self._u_bound['low'],
-                    self._u_bound['high']), layer_norm, noisy_layer)
+                'target', self._t_obs,
+                U.scaling(self._target_actor.pi, 0.0, 1.0, u_bound['low'],
+                          u_bound['high']), self._is_training, layer_norm,
+                noisy_layer)
 
         self._build_train_method()
         self._update_target_op = self._update_target_networks()
@@ -77,26 +83,28 @@ class DDPG(object):
         return (self._target_critic.trainable_vars +
                 self._target_actor.trainable_vars)
 
-    def noisy_action(self, state):
+    def noisy_action(self, state, ):
         pi, q = self._sess.run(
             [self._actor.pi, self._critic_pi.Q], feed_dict={
                 self._obs: [state],
+                self._is_training: True,
             })
         if not self._noisy:
             pi[0] += self.ou_noise.noise()
-        clip_pi = np.clip(pi[0], -1.0, 1.0)
-        scaled_pi = U.scaling(
-            clip_pi, -1.0, 1.0, self._u_bound['low'], self._u_bound['high'])
-        return scaled_pi.copy(), q[0].copy()
+        pi = np.clip(pi[0], 0.0, 1.0)
+        pi = U.scaling(
+            pi, 0.0, 1.0, self._u_bound['low'], self._u_bound['high'])
+        return pi.copy(), q[0].copy()
 
     def action(self, state):
         pi, q = self._sess.run(
             [self._actor.pi, self._critic_pi.Q], feed_dict={
                 self._obs: [state],
+                self._is_training: False,
             })
-        scaled_pi = U.scaling(
-            pi[0], -1.0, 1.0, self._u_bound['low'], self._u_bound['high'])
-        return scaled_pi.copy(), q[0].copy()
+        pi = U.scaling(
+            pi[0], 0.0, 1.0, self._u_bound['low'], self._u_bound['high'])
+        return pi.copy(), q[0].copy()
 
     def initialize_target_networks(self):
         self._sess.run([
@@ -159,6 +167,7 @@ class DDPG(object):
                 self._obs: state_batch,
                 self._u: action_batch,
                 self._t_obs: next_state_batch,
+                self._is_training: True,
             })
 
         self._sess.run(self._update_target_op)
