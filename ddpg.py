@@ -4,15 +4,14 @@ import tensorflow as tf
 from networks import Actor
 from networks import Critic
 
-import utills.opts as U
 from utills.ounoise import OUNoise
 from utills.memory import ReplayMemory
 
 
 class DDPG(object):
-    def __init__(self, sess, dimo, dimu, o_bound, u_bound, critic_lr, actor_lr,
+    def __init__(self, sess, dimo, dimu, u_bound, critic_lr, actor_lr,
                  critic_l2, clip_norm, tau, layer_norm, noisy_layer, gamma,
-                 memory_size, exploration, batch_size, env_dt, norm):
+                 memory_size, exploration, batch_size, env_dt):
         self._sess = sess
 
         self._dimo = dimo
@@ -27,45 +26,30 @@ class DDPG(object):
         self._tau = tau
         self._batch_size = batch_size
         self._u_bound = u_bound
-        self._o_bound = o_bound
-        self._norm = norm
 
         self._global_step = tf.train.get_or_create_global_step()
 
-        self.ou_noise = OUNoise(
-            dim=dimu, n_step_annealing=exploration, dt=env_dt)
+        self.ou_noise = OUNoise(dim=dimu, sigma=0.3, n_step_annealing=exploration, dt=env_dt)
         self._memory = ReplayMemory(memory_size)
 
         with tf.variable_scope('inputs'):
             self._is_training = tf.placeholder(tf.bool, name='is_training')
-            self._obs = tf.placeholder(
-                tf.float32, [None, self._dimo], name='state')
-            self._u = tf.placeholder(
-                tf.float32, [None, self._dimu], name='action')
-            self._t_obs = tf.placeholder(
-                tf.float32, [None, self._dimo], name='target_state')
+            self._obs = tf.placeholder(tf.float32, [None, self._dimo], name='state')
+            self._u = tf.placeholder(tf.float32, [None, self._dimu], name='action')
+            self._t_obs = tf.placeholder(tf.float32, [None, self._dimo], name='target_state')
 
         with tf.variable_scope('actor'):
-            self._actor = Actor(
-                'main', self._obs, dimu, self._is_training, layer_norm,
-                noisy_layer)
-            self._target_actor = Actor(
-                'target', self._t_obs, dimu, self._is_training, layer_norm,
-                noisy_layer)
+            self._actor = Actor('main', self._obs, dimu, self._is_training, layer_norm, noisy_layer)
+            self._target_actor = Actor('target', self._t_obs, dimu, self._is_training, layer_norm,
+                                       noisy_layer)
 
         with tf.variable_scope('critic'):
-            self._critic = Critic(
-                'main', self._obs, self._u, self._is_training, layer_norm,
-                noisy_layer)
-            self._critic_pi = Critic(
-                'main', self._obs, U.scaling(
-                    self._actor.pi, 0.0, 1.0, u_bound['low'], u_bound['high']),
-                self._is_training, layer_norm, noisy_layer, reuse=True)
-            self._target_critic = Critic(
-                'target', self._t_obs,
-                U.scaling(self._target_actor.pi, 0.0, 1.0, u_bound['low'],
-                          u_bound['high']), self._is_training, layer_norm,
-                noisy_layer)
+            self._critic = Critic('main', self._obs, self._u, self._is_training, layer_norm,
+                                  noisy_layer)
+            self._critic_pi = Critic('main', self._obs, self._actor.pi, self._is_training,
+                                     layer_norm, noisy_layer, reuse=True)
+            self._target_critic = Critic('target', self._t_obs, self._target_actor.pi,
+                                         self._is_training, layer_norm, noisy_layer)
 
         self._build_train_method()
         self._update_target_op = self._update_target_networks()
@@ -80,31 +64,20 @@ class DDPG(object):
 
     @property
     def target_trainable_vars(self):
-        return (self._target_critic.trainable_vars +
-                self._target_actor.trainable_vars)
+        return self._target_critic.trainable_vars + self._target_actor.trainable_vars
 
-    def act_noisy(self, state):
-        pi, q = self._sess.run(
-            [self._actor.pi, self._critic_pi.Q], feed_dict={
-                self._obs: [state],
-                self._is_training: True,
-            })
-        if not self._noisy:
-            pi[0] += self.ou_noise.noise()
-        pi = np.clip(pi[0], 0.0, 1.0)
-        pi = U.scaling(
-            pi, 0.0, 1.0, self._u_bound['low'], self._u_bound['high'])
-        return pi.copy(), q[0].copy()
-
-    def act(self, state):
+    def act(self, state, explore=False):
         pi, q = self._sess.run(
             [self._actor.pi, self._critic_pi.Q], feed_dict={
                 self._obs: [state],
                 self._is_training: False,
             })
-        pi = U.scaling(
-            pi[0], 0.0, 1.0, self._u_bound['low'], self._u_bound['high'])
-        return pi.copy(), q[0].copy()
+
+        if not self._noisy and explore:
+            pi[0] += self.ou_noise.noise()
+            pi[0] = np.clip(pi[0], -1.0, 1.0)
+
+        return pi[0].copy(), q[0].copy()
 
     def initialize_target_networks(self):
         self._sess.run([
@@ -115,18 +88,17 @@ class DDPG(object):
     def observe(self, state, action, reward, next_state, done):
         self._memory.add(state, action, reward, next_state, done)
 
-        if self._memory.size >= self._batch_size:
+        if self._memory.size >= 2500:
             self._train_mini_batch()
 
     def _build_train_method(self):
         with tf.variable_scope('optimizer'):
             self._reward = tf.placeholder(tf.float32, [None, 1], 'reward')
             self._done = tf.placeholder(tf.float32, [None, 1], 'terminal')
-            target_y = (self._reward + (1.0 - self._done) * self._gamma
-                        * self._target_critic.Q)
+            target_y = self._reward + (1.0 - self._done) * self._gamma * self._target_critic.Q
 
-            self._critic_loss = tf.reduce_mean(
-                tf.square(tf.stop_gradient(target_y) - self._critic.Q))
+            self._critic_loss = tf.losses.mean_squared_error(
+                    tf.stop_gradient(target_y), self._critic.Q)
             if self._critic_l2 > 0.0:
                 w_l2 = [var for var in self._critic.trainable_vars
                         if 'kernel' in var.name and 'output' not in var.name]
@@ -134,18 +106,15 @@ class DDPG(object):
                 l2_loss = tf.contrib.layers.apply_regularization(reg, w_l2)
                 self._critic_loss += l2_loss
 
-            c_grads = tf.gradients(
-                self._critic_loss, self._critic.trainable_vars)
+            c_grads = tf.gradients(self._critic_loss, self._critic.trainable_vars)
             if self._clip_norm > 0.0:
                 c_grads, _ = tf.clip_by_global_norm(c_grads, self._clip_norm)
             critic_optim = tf.train.AdamOptimizer(self._critic_lr)
             self._critic_train_op = critic_optim.apply_gradients(
-                zip(c_grads, self._critic.trainable_vars),
-                global_step=self._global_step)
+                zip(c_grads, self._critic.trainable_vars), global_step=self._global_step)
 
             self._actor_loss = -tf.reduce_mean(self._critic_pi.Q)
-            a_grads = tf.gradients(self._actor_loss,
-                                   self._actor.trainable_vars)
+            a_grads = tf.gradients(self._actor_loss, self._actor.trainable_vars)
             if self._clip_norm > 0.0:
                 a_grads, _ = tf.clip_by_global_norm(a_grads, self._clip_norm)
             actor_optim = tf.train.AdamOptimizer(self._actor_lr)
@@ -175,9 +144,7 @@ class DDPG(object):
     def _update_target_networks(self):
         with tf.variable_scope('update_targets'):
             update = [
-                t_var.assign(
-                    t_var * (1.0 - self._tau) + var * self._tau)
-                for var, t_var in
-                zip(self.main_trainable_vars, self.target_trainable_vars)
+                t_var.assign(t_var * (1.0 - self._tau) + var * self._tau)
+                for var, t_var in zip(self.main_trainable_vars, self.target_trainable_vars)
             ]
         return update

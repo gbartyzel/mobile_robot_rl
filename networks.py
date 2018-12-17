@@ -20,8 +20,7 @@ class Base(object):
     @property
     def trainable_vars(self):
         return tf.get_collection(
-            tf.GraphKeys.TRAINABLE_VARIABLES,
-            scope=self._type + '/' + self.name)
+            tf.GraphKeys.TRAINABLE_VARIABLES, scope=self._type + '/' + self.name)
 
 
 class Actor(Base):
@@ -40,29 +39,26 @@ class Actor(Base):
     def _build_network(self, layer_norm, noisy_layer, reuse):
         out = self.obs
 
-        layers = (100, 80,)
+        layers = (200, 150,)
         for i, layer in enumerate(layers):
             with tf.variable_scope('layer_{}'.format(i)):
                 if noisy_layer:
-                    out = U.noisy_layer(out, layer, self.is_training)
+                    out = U.independent_noisy_layer(out, layer, self.is_training)
                 else:
                     val = 1 / np.sqrt(out.get_shape().as_list()[1])
                     init = tf.truncated_normal_initializer(stddev=val)
                     out = tf.layers.dense(
-                        out, layer, kernel_initializer=init,
-                        bias_initializer=init, use_bias=False)
+                        out, layer, kernel_initializer=init, bias_initializer=init)
                 if layer_norm:
                     out = tf.contrib.layers.layer_norm(out)
                 out = tf.nn.relu(out)
 
         if noisy_layer:
-            out = U.noisy_layer(
-                out, self._dimu, self.is_training, name='output_layer')
+            out = U.independent_noisy_layer(out, self._dimu, self.is_training, name='output_layer')
         else:
             init = tf.random_uniform_initializer(-3e-3, 3e-3)
-            out = tf.layers.dense(out, self._dimu, kernel_initializer=init,
-                                  name='output_layer')
-        out = tf.sigmoid(out)
+            out = tf.layers.dense(out, self._dimu, kernel_initializer=init, name='output_layer')
+        out = tf.tanh(out)
 
         return out
 
@@ -83,28 +79,26 @@ class Critic(Base):
     def _build_network(self, layer_norm, noisy_layer, reuse):
         out = self.obs
 
-        layers = (100, 80,)
+        layers = (200, 150,)
         for i, layer in enumerate(layers):
             with tf.variable_scope('layer_{}'.format(i)):
                 if i == 1:
                     out = tf.concat((out, self.u), axis=1)
                 if noisy_layer:
-                    out = U.noisy_layer(out, layer, self.is_trainig)
+                    out = U.independent_noisy_layer(out, layer, self.is_trainig)
                 else:
                     val = 1 / np.sqrt(out.get_shape().as_list()[1])
                     init = tf.truncated_normal_initializer(stddev=val)
                     out = tf.layers.dense(
-                        out, layer, kernel_initializer=init,
-                        bias_initializer=init, use_bias=False)
+                        out, layer, kernel_initializer=init, bias_initializer=init)
                 if layer_norm:
                     out = tf.contrib.layers.layer_norm(out)
                 out = tf.nn.relu(out)
 
         if noisy_layer:
-            out = U.noisy_layer(out, 1, self.is_trainig, name='output_layer')
+            out = U.independent_noisy_layer(out, 1, self.is_trainig, name='output_layer')
         else:
             init = tf.random_uniform_initializer(-3e-3, 3e-3)
-            out = tf.layers.dense(out, 1, kernel_initializer=init,
-                                  name='output_layer')
+            out = tf.layers.dense(out, 1, kernel_initializer=init, name='output_layer')
 
         return out

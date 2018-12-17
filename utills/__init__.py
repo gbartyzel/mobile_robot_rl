@@ -3,13 +3,14 @@ __all__ = [
     'OUNoise',
     'Logger',
     'dense',
-    'noisy_layer',
+    'factorized_noisy_layer',
+    'independent_noisy_layer',
     'huber_loss',
-    'scaling',
+    'scale',
     'reduce_var',
     'reduce_std',
     'normalize',
-    'env_logger'
+    'env_logger',
 ]
 
 from utills.logger import Logger

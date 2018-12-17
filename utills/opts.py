@@ -4,7 +4,7 @@ import tensorflow as tf
 
 # ***********TensorFlow helper functions*********** #
 
-def scaling(x, u_min, u_max, t_min=-1.0, t_max=1.0):
+def scale(x, u_min, u_max, t_min=-1.0, t_max=1.0):
     """
     Scale tensor or ndarray to specific value range
     :param x: input tensor
@@ -18,8 +18,7 @@ def scaling(x, u_min, u_max, t_min=-1.0, t_max=1.0):
         return (x - u_min) / (u_max - u_min) * (t_max - t_min) + t_min
     else:
         with tf.variable_scope('scaling'):
-            m = tf.add(tf.multiply(tf.divide((x - u_min), (u_max - u_min)),
-                                   (t_max - t_min)), t_min)
+            m = tf.add(tf.multiply(tf.divide((x - u_min), (u_max - u_min)), (t_max - t_min)), t_min)
             return m
 
 
@@ -45,17 +44,15 @@ def dense(x, name, shape, weight_init=None, bias_init=None, weight_reg=None,
 
     with tf.variable_scope(name, reuse=reuse):
         x_shape = x.get_shape().as_list()[1]
-        w = tf.get_variable('weight', [x_shape, shape], tf.float32,
-                            weight_init, weight_reg)
-        b = tf.get_variable('bias', [shape], tf.float32, bias_init,
-                            bias_reg)
+        w = tf.get_variable('weight', [x_shape, shape], tf.float32, weight_init, weight_reg)
+        b = tf.get_variable('bias', [shape], tf.float32, bias_init, bias_reg)
 
         if activation:
             return activation(tf.add(tf.matmul(x, w), b))
         return tf.add(tf.matmul(x, w), b)
 
 
-def noisy_layer(x, shape, is_training, activation=None, name=None, reuse=None):
+def factorized_noisy_layer(x, shape, is_training, activation=None, name=None, reuse=None):
     """
     Noisy layer for exploration https://arxiv.org/pdf/1706.10295.pdf.
     Create linear layer of shape n x m, where n is shape of input tensor,
@@ -74,8 +71,7 @@ def noisy_layer(x, shape, is_training, activation=None, name=None, reuse=None):
 
     x_shape = x.get_shape().as_list()[1]
 
-    def noise_func(x_):
-        return tf.multiply(tf.sign(x_), tf.sqrt(tf.abs(x_)))
+    noising = lambda x_: tf.multiply(tf.sign(x_), tf.sqrt(tf.abs(x_)))
 
     mu_val = 1 / np.sqrt(x_shape)
     mu_init = tf.random_uniform_initializer(-mu_val, mu_val, dtype=tf.float32)
@@ -87,20 +83,61 @@ def noisy_layer(x, shape, is_training, activation=None, name=None, reuse=None):
         noise_j = tf.random_normal([1, shape])
 
         with tf.variable_scope('kernel'):
-            w_eps = noise_func(noise_i) * noise_func(noise_j)
-            w_mu = tf.get_variable(
-                'mean', [x_shape, shape], tf.float32, mu_init)
-            w_sigma = tf.get_variable(
-                'sigma', [x_shape, shape], tf.float32, sigma_init)
-            w = tf.where(
-                is_training, tf.add(w_mu, tf.multiply(w_sigma, w_eps)), w_mu)
+            w_eps = noising(noise_i) * noising(noise_j)
+            w_mu = tf.get_variable('mean', [x_shape, shape], tf.float32, mu_init)
+            w_sigma = tf.get_variable('sigma', [x_shape, shape], tf.float32, sigma_init)
+            w = tf.where(is_training, tf.add(w_mu, tf.multiply(w_sigma, w_eps)), w_mu)
 
         with tf.variable_scope('bias'):
-            b_eps = tf.squeeze(noise_func(noise_j))
+            b_eps = tf.squeeze(noising(noise_j))
             b_mu = tf.get_variable('mean', [shape], tf.float32, mu_init)
             b_sigma = tf.get_variable('sigma', [shape], tf.float32, sigma_init)
-            b = tf.where(
-                is_training, tf.add(b_mu, tf.multiply(b_sigma, b_eps)), b_mu)
+            b = tf.where(is_training, tf.add(b_mu, tf.multiply(b_sigma, b_eps)), b_mu)
+
+        if activation:
+            output = activation(tf.add(tf.matmul(x, w), b))
+        else:
+            output = tf.add(tf.matmul(x, w), b)
+
+        return output
+
+
+def independent_noisy_layer(x, shape, is_training, activation=None, name=None, reuse=None):
+    """
+    Noisy layer for exploration https://arxiv.org/pdf/1706.10295.pdf.
+    Create linear layer of shape n x m, where n is shape of input tensor,
+    and m is defined by shape argument.
+    :param x: input tensor
+    :param shape: integer, output shape of layer
+    :param is_training, boolean
+    :param activation: activation function of the layer
+    :param name: string, name of the layer
+    :param reuse: boolean, whether to reuse the weights of a previous layer
+    by the same name
+    :return: output tensor
+    """
+    if not name:
+        name = 'NoisyLayer'
+
+    x_shape = x.get_shape().as_list()[1]
+
+    mu_val = np.sqrt(3.0 / x_shape)
+    mu_init = tf.random_uniform_initializer(-mu_val, mu_val, dtype=tf.float32)
+    sigma_val = 0.017
+    sigma_init = tf.constant_initializer(sigma_val, dtype=tf.float32)
+
+    with tf.variable_scope(name, reuse=reuse):
+        with tf.variable_scope('kernel'):
+            w_eps = tf.random_normal([x_shape, shape])
+            w_mu = tf.get_variable('mean', [x_shape, shape], tf.float32, mu_init)
+            w_sigma = tf.get_variable('sigma', [x_shape, shape], tf.float32, sigma_init)
+            w = tf.where(is_training, tf.add(w_mu, tf.multiply(w_sigma, w_eps)), w_mu)
+
+        with tf.variable_scope('bias'):
+            b_eps = tf.random_normal([shape])
+            b_mu = tf.get_variable('mean', [shape], tf.float32, mu_init)
+            b_sigma = tf.get_variable('sigma', [shape], tf.float32, sigma_init)
+            b = tf.where(is_training, tf.add(b_mu, tf.multiply(b_sigma, b_eps)), b_mu)
 
         if activation:
             output = activation(tf.add(tf.matmul(x, w), b))
@@ -127,9 +164,8 @@ def huber_loss(labels, predictions, delta=1.0, name=None):
 
     with tf.variable_scope(name):
         error = labels - predictions
-        huber_term = tf.where(
-            tf.abs(error) < delta, 0.5 * tf.square(error),
-            delta * (tf.abs(error) - 0.5 * delta))
+        huber_term = tf.where(tf.abs(error) < delta, 0.5 * tf.square(error),
+                              delta * (tf.abs(error) - 0.5 * delta))
         loss = tf.reduce_mean(huber_term)
 
         return loss

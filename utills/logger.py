@@ -5,10 +5,12 @@ import tensorflow as tf
 
 import utills.opts as U
 
+
 class Logger(object):
     """
     Logger class for reinforcement learning agent based on TensorFLow.
     """
+
     def __init__(self, sess, agent, logdir):
         """
         :param sess: TensorFlow session

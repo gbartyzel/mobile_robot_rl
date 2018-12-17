@@ -37,7 +37,7 @@ class OUNoise:
         """
         self._state = np.ones(self._dim) * self._mu
 
-    def noise(self):
+    def __call__(self):
         """
         Calculate noise value on the step t
         :return: np.ndarray, noise
@@ -46,7 +46,6 @@ class OUNoise:
         self._sigma = max(self._sigma_min, self._sigma)
 
         x = (self._state + self._theta * (self._mu - self._state) * self._dt
-             + np.sqrt(self._dt) * self._sigma
-             * nr.normal(size=self._state.shape))
+             + np.sqrt(self._dt) * self._sigma * nr.normal(size=self._state.shape))
         self._state = x
         return x
