@@ -11,7 +11,7 @@ class Logger(object):
     Logger class for reinforcement learning agent based on TensorFLow.
     """
 
-    def __init__(self, sess, agent, logdir):
+    def __init__(self, sess, agent, logdir, save_interval=10):
         """
         :param sess: TensorFlow session
         :param agent: object, rl agent
@@ -20,6 +20,10 @@ class Logger(object):
         self._sess = sess
         self._logdir = logdir
         self._agent = agent
+        self._save_interval = save_interval
+
+        self._log_reward = list()
+        self._log_success_rate = list()
 
         with tf.variable_scope('summary'):
             self._build_variables_sumamry()
@@ -27,36 +31,48 @@ class Logger(object):
 
         self._merged = tf.summary.merge_all()
 
-        self._train_writer = tf.summary.FileWriter(
-            os.path.join(logdir, 'train'), sess.graph)
-        self._test_writer = tf.summary.FileWriter(
-            os.path.join(logdir, 'test'))
+        self._train_writer = tf.summary.FileWriter(os.path.join(logdir, 'train'), sess.graph)
+        self._test_writer = tf.summary.FileWriter(os.path.join(logdir, 'test'))
 
         self.saver = None
 
-    def save(self, global_step):
+    def save(self):
         """
         Save model
-        :param global_step: integer or tf variable, step of training
         """
-        self.saver.save(self._sess, os.path.join(self._logdir, 'model'),
-                        global_step=global_step)
+        if len(self._log_success_rate) > self._save_interval:
+            if (self._log_success_rate[-self._save_interval:] >
+                    self._log_success_rate[-self._save_interval-1:-1]):
+                self.saver.save(self._sess, os.path.join(self._logdir, 'model'),
+                                global_step=self._agent.global_step)
 
-    def writer(self, ep_reward, ep_q, ep_step, test=False):
+    def save_log(self):
+        np.savetxt(os.path.join(self._logdir, 'reward_log.csv'),
+                   np.vstack(self._log_reward), delimiter=',')
+        np.savetxt(os.path.join(self._logdir, 'success_rate_log.csv'),
+                   np.vstack(self._log_success_rate), delimiter=',')
+
+    def writer(self, ep_reward, ep_q, ep_step, success_rate, test=False):
         """
         Write Tensorboard logs from episodes
         :param ep_reward: list, reward values
         :param ep_q: list, q values
         :param ep_step: list, episode steps
+        :param success_rate: list
         :param test, boolean, determine if testing episode
         """
         summary = self._sess.run(self._merged, feed_dict={
             self._ep_reward: self._check_type(self._ep_reward, ep_reward),
             self._ep_q: self._check_type(self._ep_q, ep_q),
             self._ep_steps: self._check_type(self._ep_steps, ep_step),
+            self._success_rate: self._check_type(self._success_rate, success_rate)
         })
+
         if test:
             self._test_writer.add_summary(summary, self._agent.global_step)
+            self._log_reward.append(ep_reward)
+            self._log_success_rate.append(success_rate)
+            self.save()
         else:
             self._train_writer.add_summary(summary, self._agent.global_step)
 
@@ -80,16 +96,15 @@ class Logger(object):
             tf.summary.histogram(var.name, var)
 
     def _build_test_summary(self):
-        self._ep_reward = tf.placeholder(
-            tf.float32, [None, ], name='episode_rewards')
-        self._ep_q = tf.placeholder(
-            tf.float32, [None, ], name='episode_q')
-        self._ep_steps = tf.placeholder(
-            tf.float32, [None, ], 'episode_steps')
+        self._ep_reward = tf.placeholder(tf.float32, [None, ], name='episode_rewards')
+        self._ep_q = tf.placeholder(tf.float32, [None, ], name='episode_q')
+        self._ep_steps = tf.placeholder(tf.float32, [None, ], 'episode_steps')
+        self._success_rate = tf.placeholder(tf.float32, [None, ], 'success_rate')
         tf_map = {
             'reward_summary': self._ep_reward,
             'q_value_summary': self._ep_q,
-            'step_summary': self._ep_steps
+            'step_summary': self._ep_steps,
+            'success_rate_summary': self._success_rate,
         }
 
         for key, var in tf_map.items():

@@ -25,7 +25,7 @@ class DDPG(object):
         self._gamma = gamma
         self._tau = tau
         self._batch_size = batch_size
-        self._u_bound = u_bound
+        self._action_bound = u_bound
 
         self._global_step = tf.train.get_or_create_global_step()
 
@@ -35,22 +35,25 @@ class DDPG(object):
 
         with tf.variable_scope('inputs'):
             self._is_training = tf.placeholder(tf.bool, name='is_training')
-            self._obs = tf.placeholder(tf.float32, [None, self._state_dim], name='state')
-            self._u = tf.placeholder(tf.float32, [None, self._action_dim], name='action')
-            self._t_obs = tf.placeholder(tf.float32, [None, self._state_dim], name='target_state')
+            self._observation_tf = tf.placeholder(tf.float32, [None, self._state_dim], name='state')
+            self._action_tf = tf.placeholder(tf.float32, [None, self._action_dim], name='action')
+            self._t_observation_tf = tf.placeholder(
+                tf.float32, [None, self._state_dim], name='target_state')
 
         with tf.variable_scope('actor'):
-            self._actor = Actor('main', self._obs, self._action_dim, self._is_training, layer_norm,
+            self._actor = Actor('main', self._observation_tf, self._action_dim,
+                                self._action_bound['high'], self._is_training, layer_norm,
                                 noisy_layer)
-            self._target_actor = Actor('target', self._t_obs, self._action_dim, self._is_training,
-                                       layer_norm, noisy_layer)
+            self._target_actor = Actor('target', self._t_observation_tf, self._action_dim,
+                                       self._action_bound['high'], self._is_training, layer_norm,
+                                       noisy_layer)
 
         with tf.variable_scope('critic'):
-            self._critic = Critic('main', self._obs, self._u, self._is_training, layer_norm,
-                                  noisy_layer)
-            self._critic_pi = Critic('main', self._obs, self._actor.pi, self._is_training,
+            self._critic = Critic('main', self._observation_tf, self._action_tf, self._is_training,
+                                  layer_norm, noisy_layer)
+            self._critic_pi = Critic('main', self._observation_tf, self._actor.pi, self._is_training,
                                      layer_norm, noisy_layer, reuse=True)
-            self._target_critic = Critic('target', self._t_obs, self._target_actor.pi,
+            self._target_critic = Critic('target', self._t_observation_tf, self._target_actor.pi,
                                          self._is_training, layer_norm, noisy_layer)
 
         self._build_train_method()
@@ -71,13 +74,14 @@ class DDPG(object):
     def act(self, state, explore=False):
         pi, q = self._sess.run(
             [self._actor.pi, self._critic_pi.Q], feed_dict={
-                self._obs: [state],
+                self._observation_tf: [state],
                 self._is_training: False,
             })
 
         if not self._noisy and explore:
-            pi[0] += self.ou_noise()
-            pi[0] = np.clip(pi[0], -1.0, 1.0)
+            noise = self.ou_noise() * np.mean(list(self._action_bound.values()))
+            pi[0] += noise
+            pi[0] = np.clip(pi[0], self._action_bound['low'], self._action_bound['high'])
 
         return pi[0].copy(), q[0].copy()
 
@@ -135,9 +139,9 @@ class DDPG(object):
             [self._critic_train_op, self._actor_train_op], feed_dict={
                 self._reward: reward_batch,
                 self._done: done_batch,
-                self._obs: state_batch,
-                self._u: action_batch,
-                self._t_obs: next_state_batch,
+                self._observation_tf: state_batch,
+                self._action_tf: action_batch,
+                self._t_observation_tf: next_state_batch,
                 self._is_training: True,
             })
 

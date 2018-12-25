@@ -23,7 +23,7 @@ def parser_setup():
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--critic_lr', type=float, default=1e-3)
-    parser.add_argument('--critic_l2', type=float, default=1e-3)
+    parser.add_argument('--critic_l2', type=float, default=1e-2)
     parser.add_argument('--actor_lr', type=float, default=1e-4)
     parser.add_argument('--clip_norm', type=float, default=10.0)
     parser.add_argument('--tau', type=float, default=1e-3)
@@ -59,7 +59,7 @@ def main(env_id, train, logdir, **kwargs):
     if train:
         play.train(kwargs['nb_episodes'], kwargs['nb_eval_episodes'])
 
-    play.eval()
+    play.run_env(train=False)
     env.close()
 
 
