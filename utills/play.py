@@ -22,8 +22,8 @@ class Play(object):
         reward_for_save = 0.0
         for ep in tqdm(range(nb_episodes)):
             self._set_seed(5)
-            ep_score, ep_q_values, ep_step = self._run_env(True)
             self._agent.ou_noise.reset()
+            ep_score, ep_q_values, ep_step = self._run_env(True)
 
             self._logger.writer(ep_score, ep_q_values, ep_step)
             if ep % nb_eval_episodes == (nb_eval_episodes - 1):
@@ -53,11 +53,12 @@ class Play(object):
         episode_q_values = list()
         score = 0.0
         step = 0.0
-        state = self._normalize_reset()
+        state = self._env.reset()
         for i in range(self._env._max_episode_steps):
             step = i
             action, q_value = self._agent.act(state, train)
-            next_state, reward, terminal, _ = self._normalize_step(action)
+            action = self._set_action(action)
+            next_state, reward, terminal, _ = self._env.step(action)
             if train:
                 self._agent.observe(state, action, reward, next_state, terminal)
 
@@ -73,13 +74,5 @@ class Play(object):
         tf.random.set_random_seed(seed)
         np.random.seed(seed)
 
-    def _normalize_step(self, action):
-        scaled_action = U.scale(
-            action, -1.0, 1.0, self._env.action_space.low, self._env.action_space.high)
-        state, reward, done, _ = self._env.step(scaled_action)
-        scaled_state = state / (self._env.observation_space.high - self._env.observation_space.low)
-        return scaled_state, reward, done, _
-
-    def _normalize_reset(self):
-        state = self._env.reset()
-        return state / (self._env.observation_space.high - self._env.observation_space.low)
+    def _set_action(self, action):
+        return U.scale(action, -1.0, 1.0, self._env.action_space.low, self._env.action_space.high)

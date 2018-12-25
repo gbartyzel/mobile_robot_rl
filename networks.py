@@ -39,7 +39,7 @@ class Actor(Base):
     def _build_network(self, layer_norm, noisy_layer, reuse):
         out = self.obs
 
-        layers = (200, 150,)
+        layers = (128, 128, 64, )
         for i, layer in enumerate(layers):
             with tf.variable_scope('layer_{}'.format(i)):
                 if noisy_layer:
@@ -79,7 +79,7 @@ class Critic(Base):
     def _build_network(self, layer_norm, noisy_layer, reuse):
         out = self.obs
 
-        layers = (200, 150,)
+        layers = (128, 128, 64, )
         for i, layer in enumerate(layers):
             with tf.variable_scope('layer_{}'.format(i)):
                 if i == 1:

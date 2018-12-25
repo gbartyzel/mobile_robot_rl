@@ -29,7 +29,8 @@ class DDPG(object):
 
         self._global_step = tf.train.get_or_create_global_step()
 
-        self.ou_noise = OUNoise(dim=dimu, sigma=0.3, n_step_annealing=exploration, dt=env_dt)
+        self.ou_noise = OUNoise(
+            dim=dimu, theta=0.2, sigma=0.15, n_step_annealing=exploration, dt=env_dt)
         self._memory = ReplayMemory(memory_size)
 
         with tf.variable_scope('inputs'):
@@ -74,7 +75,7 @@ class DDPG(object):
             })
 
         if not self._noisy and explore:
-            pi[0] += self.ou_noise.noise()
+            pi[0] += self.ou_noise()
             pi[0] = np.clip(pi[0], -1.0, 1.0)
 
         return pi[0].copy(), q[0].copy()
@@ -88,7 +89,7 @@ class DDPG(object):
     def observe(self, state, action, reward, next_state, done):
         self._memory.add(state, action, reward, next_state, done)
 
-        if self._memory.size >= 2500:
+        if self._memory.size >= self._batch_size:
             self._train_mini_batch()
 
     def _build_train_method(self):

@@ -3,7 +3,6 @@ import inspect
 
 import gym
 import gym_vrep
-import numpy as np
 import tensorflow as tf
 
 from ddpg import DDPG
@@ -16,10 +15,10 @@ def parser_setup():
     parser.add_argument('--logdir', type=str, default='output')
     parser.add_argument('--env_id', type=str,
                         default='MobileRobotIdealNavigation-v0')
-    parser.add_argument('--env_dt', type=float, default=0.01)
+    parser.add_argument('--env_dt', type=float, default=0.05)
     parser.add_argument('--nb_episodes', type=int, default=1000)
     parser.add_argument('--nb_eval_episodes', type=int, default=10)
-    parser.add_argument('--exploration', type=int, default=1000000)
+    parser.add_argument('--exploration', type=int, default=100000)
     parser.add_argument('--memory_size', type=int, default=1000000)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--gamma', type=float, default=0.99)
