@@ -9,13 +9,13 @@ from utills.memory import ReplayMemory
 
 
 class DDPG(object):
-    def __init__(self, sess, dimo, dimu, u_bound, critic_lr, actor_lr,
+    def __init__(self, sess, state_dim, action_dim, u_bound, critic_lr, actor_lr,
                  critic_l2, clip_norm, tau, layer_norm, noisy_layer, gamma,
                  memory_size, exploration, batch_size, env_dt):
         self._sess = sess
 
-        self._dimo = dimo
-        self._dimu = dimu
+        self._state_dim = state_dim
+        self._action_dim = action_dim
         self._critic_l2 = critic_l2
         self._actor_lr = actor_lr
         self._critic_lr = critic_lr
@@ -30,19 +30,20 @@ class DDPG(object):
         self._global_step = tf.train.get_or_create_global_step()
 
         self.ou_noise = OUNoise(
-            dim=dimu, theta=0.2, sigma=0.15, n_step_annealing=exploration, dt=env_dt)
-        self._memory = ReplayMemory(memory_size)
+            dim=action_dim, theta=0.2, sigma=0.15, n_step_annealing=exploration, dt=env_dt)
+        self._memory = ReplayMemory(memory_size, batch_size, state_dim, action_dim)
 
         with tf.variable_scope('inputs'):
             self._is_training = tf.placeholder(tf.bool, name='is_training')
-            self._obs = tf.placeholder(tf.float32, [None, self._dimo], name='state')
-            self._u = tf.placeholder(tf.float32, [None, self._dimu], name='action')
-            self._t_obs = tf.placeholder(tf.float32, [None, self._dimo], name='target_state')
+            self._obs = tf.placeholder(tf.float32, [None, self._state_dim], name='state')
+            self._u = tf.placeholder(tf.float32, [None, self._action_dim], name='action')
+            self._t_obs = tf.placeholder(tf.float32, [None, self._state_dim], name='target_state')
 
         with tf.variable_scope('actor'):
-            self._actor = Actor('main', self._obs, dimu, self._is_training, layer_norm, noisy_layer)
-            self._target_actor = Actor('target', self._t_obs, dimu, self._is_training, layer_norm,
-                                       noisy_layer)
+            self._actor = Actor('main', self._obs, self._action_dim, self._is_training, layer_norm,
+                                noisy_layer)
+            self._target_actor = Actor('target', self._t_obs, self._action_dim, self._is_training,
+                                       layer_norm, noisy_layer)
 
         with tf.variable_scope('critic'):
             self._critic = Critic('main', self._obs, self._u, self._is_training, layer_norm,
@@ -87,7 +88,7 @@ class DDPG(object):
         ])
 
     def observe(self, state, action, reward, next_state, done):
-        self._memory.add(state, action, reward, next_state, done)
+        self._memory.push(state, action, reward, next_state, done)
 
         if self._memory.size >= self._batch_size:
             self._train_mini_batch()
@@ -99,7 +100,7 @@ class DDPG(object):
             target_y = self._reward + (1.0 - self._done) * self._gamma * self._target_critic.Q
 
             self._critic_loss = tf.losses.mean_squared_error(
-                    tf.stop_gradient(target_y), self._critic.Q)
+                tf.stop_gradient(target_y), self._critic.Q)
             if self._critic_l2 > 0.0:
                 w_l2 = [var for var in self._critic.trainable_vars
                         if 'kernel' in var.name and 'output' not in var.name]
@@ -123,7 +124,7 @@ class DDPG(object):
                 zip(a_grads, self._actor.trainable_vars))
 
     def _train_mini_batch(self):
-        train_batch = self._memory.sample(self._batch_size)
+        train_batch = self._memory.sample()
         state_batch = np.vstack(train_batch['obs1']).astype(np.float32)
         action_batch = np.vstack(train_batch['u']).astype(np.float32)
         reward_batch = np.vstack(train_batch['r']).astype(np.float32)
