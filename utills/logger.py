@@ -41,8 +41,8 @@ class Logger(object):
         Save model
         """
         if len(self._log_success_rate) > self._save_interval:
-            if (self._log_success_rate[-self._save_interval:] >
-                    self._log_success_rate[-self._save_interval-1:-1]):
+            if (np.mean(self._log_success_rate[-self._save_interval:]) >
+                    np.mean(self._log_success_rate[-self._save_interval-1:-1])):
                 self.saver.save(self._sess, os.path.join(self._logdir, 'model'),
                                 global_step=self._agent.global_step)
 

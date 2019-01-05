@@ -2,10 +2,9 @@ import argparse
 import inspect
 
 import gym
-import gym_vrep
 import tensorflow as tf
 
-from ddpg import DDPG
+from agents.ddpg import DDPG
 from utills.play import Play
 
 
@@ -27,8 +26,8 @@ def parser_setup():
     parser.add_argument('--actor_lr', type=float, default=1e-4)
     parser.add_argument('--clip_norm', type=float, default=10.0)
     parser.add_argument('--tau', type=float, default=1e-3)
-    parser.add_argument('--layer_norm', action='store_true')
-    parser.add_argument('--noisy_layer', action='store_true')
+    parser.add_argument('--use_layer_norm', action='store_true')
+    parser.add_argument('--use_noisynet', action='store_true')
 
     args = parser.parse_args()
     dict_args = vars(args)

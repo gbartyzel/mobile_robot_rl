@@ -15,16 +15,16 @@ class Play(object):
 
         self._sess.run(tf.global_variables_initializer())
         self._logger.load()
-        self._agent.initialize_target_networks()
+        self._agent.hard_update_target_networks()
 
     def train(self, nb_episodes, nb_eval_episodes):
         for ep in tqdm(range(nb_episodes)):
-            self._set_seed(5)
+            self._set_seed(None)
             self._agent.ou_noise.reset()
             ep_score, ep_q_values, ep_step, ep_info = self.run_env(True)
 
             self._logger.writer(ep_score, ep_q_values, ep_step, ep_info)
-            if ep % nb_eval_episodes == (nb_eval_episodes - 1):
+            if ep % nb_eval_episodes == (nb_eval_episodes - 1) and not self._agent.is_warm_up:
                 self._eval()
 
         self._logger.save_log()
