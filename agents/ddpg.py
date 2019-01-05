@@ -9,9 +9,12 @@ from utills.memory import ReplayMemory
 
 
 class DDPG(object):
-    def __init__(self, sess, state_dim, action_dim, u_bound, critic_lr, actor_lr,
-                 critic_l2, clip_norm, tau, use_layer_norm, use_noisynet, gamma,
-                 memory_size, exploration, batch_size, env_dt):
+    def __init__(self, sess, state_dim, action_dim, u_bound, critic_lr, actor_lr, n_step, critic_l2,
+                 clip_norm, tau, use_layer_norm, use_noisynet, gamma, memory_size, exploration,
+                 batch_size, env_dt):
+        self.gamma = gamma
+        self.n_step = n_step
+
         self._sess = sess
 
         self._state_dim = state_dim
@@ -22,7 +25,6 @@ class DDPG(object):
         self._clip_norm = clip_norm
 
         self._use_noisynet = use_noisynet
-        self._gamma = gamma
         self._tau = tau
         self._batch_size = batch_size
         self._action_bound = u_bound
@@ -93,7 +95,8 @@ class DDPG(object):
     def _build_critic_train_method(self):
         self._reward = tf.placeholder(tf.float32, [None, 1], 'reward')
         self._done = tf.placeholder(tf.float32, [None, 1], 'terminal')
-        target_y = self._reward + (1.0 - self._done) * self._gamma * self._target_q_value_tf
+        target_y = (self._reward + (1.0 - self._done) * self.gamma ** self.n_step
+                    * self._target_q_value_tf)
 
         self._critic_loss = tf.losses.mean_squared_error(target_y, self._q_value_tf)
         if self._critic_l2 > 0.0:

@@ -2,6 +2,7 @@ import argparse
 import inspect
 
 import gym
+import gym_vrep
 import tensorflow as tf
 
 from agents.ddpg import DDPG
@@ -12,8 +13,7 @@ def parser_setup():
     parser = argparse.ArgumentParser()
     parser.add_argument('--train', action='store_true')
     parser.add_argument('--logdir', type=str, default='output')
-    parser.add_argument('--env_id', type=str,
-                        default='MobileRobotIdealNavigation-v0')
+    parser.add_argument('--env_id', type=str, default='MobileRobotIdealNavigation-v0')
     parser.add_argument('--env_dt', type=float, default=0.05)
     parser.add_argument('--nb_episodes', type=int, default=1000)
     parser.add_argument('--nb_eval_episodes', type=int, default=10)
@@ -21,9 +21,10 @@ def parser_setup():
     parser.add_argument('--memory_size', type=int, default=1000000)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--gamma', type=float, default=0.99)
-    parser.add_argument('--critic_lr', type=float, default=1e-3)
+    parser.add_argument('--n_step', type=int, default=5)
+    parser.add_argument('--critic_lr', type=float, default=5e-4)
     parser.add_argument('--critic_l2', type=float, default=1e-2)
-    parser.add_argument('--actor_lr', type=float, default=1e-4)
+    parser.add_argument('--actor_lr', type=float, default=1e-5)
     parser.add_argument('--clip_norm', type=float, default=10.0)
     parser.add_argument('--tau', type=float, default=1e-3)
     parser.add_argument('--use_layer_norm', action='store_true')

@@ -48,27 +48,38 @@ class Play(object):
         self._logger.writer(eval_scores, eval_q_values, eval_steps, eval_info, True)
 
     def run_env(self, train):
+        episode_states = list()
+        episode_rewards = list()
+        episode_actions = list()
+
         episode_q_values = list()
-        score = 0.0
         step = 0.0
-        info = False
+        info = 0.0
 
         state = self._env.reset()
         for i in range(self._env._max_episode_steps):
             step = i
             action, q_value = self._agent.act(state, train)
             next_state, reward, terminal, info = self._env.step(action)
-            if train:
-                self._agent.observe(state, action, reward, next_state, terminal)
+
+            episode_actions.append(action)
+            episode_states.append(state)
+            episode_rewards.append(reward)
+
+            if train and len(episode_rewards) > self._agent.n_step:
+                discount = self._agent.gamma ** np.arange(self._agent.n_step)
+                cum_reward = np.sum(np.asarray(episode_rewards[-self._agent.n_step:]) * discount)
+                self._agent.observe(
+                    episode_states[-self._agent.n_step], episode_actions[-self._agent.n_step],
+                    cum_reward, next_state, terminal)
 
             state = next_state
-            score += reward
             info = info['is_success']
             episode_q_values.append(q_value)
 
             if terminal:
                 break
-        return score, np.squeeze(episode_q_values), step, info
+        return np.mean(episode_rewards), np.squeeze(episode_q_values), step, info
 
     def _set_seed(self, seed):
         self._env.seed(seed)
