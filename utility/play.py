@@ -16,7 +16,6 @@ class Play(object):
         self._sess.run(tf.global_variables_initializer())
         self._logger.load()
         self._agent.hard_update_target_networks()
-        self._state_rms = U.RunningMeanStd(env.observation_space.shape[0])
 
     def train(self, nb_episodes, nb_eval_episodes):
         for ep in tqdm(range(nb_episodes)):

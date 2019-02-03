@@ -120,24 +120,3 @@ class Logger(object):
             var = [var]
 
         return var
-
-
-def env_logger(env):
-    """
-    Print gym env parameters
-    :param env: gym.env,
-    """
-    u_low = env.action_space.low
-    u_high = env.action_space.high
-    obs_low = env.observation_space.low
-    obs_high = env.observation_space.high
-    max_steps = env._max_episode_steps
-
-    print('Environment information')
-    print('-----------------------')
-    print('Action: \n low: {} \n high: {}'.format(u_low, u_high))
-    print('-----------------------')
-    print('Observation: \n low: {} \n high: {}'.format(obs_low, obs_high))
-    print('-----------------------')
-    print('Episode max steps: {}'.format(max_steps))
-    print('-----------------------')

@@ -21,7 +21,7 @@ def parser_setup():
     parser.add_argument('--memory_size', type=int, default=1000000)
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--gamma', type=float, default=0.99)
-    parser.add_argument('--n_step', type=int, default=1)
+    parser.add_argument('--n_step', type=int, default=5)
     parser.add_argument('--critic_lr', type=float, default=1e-3)
     parser.add_argument('--critic_l2', type=float, default=0.0)
     parser.add_argument('--actor_lr', type=float, default=1e-4)
