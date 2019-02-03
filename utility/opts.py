@@ -171,6 +171,11 @@ def huber_loss(labels, predictions, delta=1.0, name=None):
         return loss
 
 
+def ddpg_initializer(x):
+    val = 1 / np.sqrt(x.get_shape().as_list()[1])
+    return tf.truncated_normal_initializer(stddev=val)
+
+
 def reduce_var(x, axis=None, keepdims=False, name='reduce_variance'):
     """
     Create operation in graph that calculate variance of the input tensor.

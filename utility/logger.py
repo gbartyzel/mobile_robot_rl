@@ -3,7 +3,7 @@ import os
 import numpy as np
 import tensorflow as tf
 
-import utills.opts as U
+import utility as U
 
 
 class Logger(object):

@@ -1,8 +1,8 @@
 import numpy as np
 import tensorflow as tf
 
+import utility as U
 from tqdm import tqdm
-from utills.logger import Logger
 
 
 class Play(object):
@@ -10,17 +10,17 @@ class Play(object):
         self._sess = sess
         self._env = env
         self._agent = agent
-        self._logger = Logger(self._sess, self._agent, logdir)
+        self._logger = U.Logger(self._sess, self._agent, logdir)
         self._eval_seeds = [42, 125, 356, 466, 689, 1024, 1337, 2490, 3809, 6667]
 
         self._sess.run(tf.global_variables_initializer())
         self._logger.load()
         self._agent.hard_update_target_networks()
+        self._state_rms = U.RunningMeanStd(env.observation_space.shape[0])
 
     def train(self, nb_episodes, nb_eval_episodes):
         for ep in tqdm(range(nb_episodes)):
             self._set_seed(None)
-            self._agent.ou_noise.reset()
             ep_score, ep_q_values, ep_step, ep_info = self.run_env(True)
 
             self._logger.writer(ep_score, ep_q_values, ep_step, ep_info)
@@ -57,6 +57,7 @@ class Play(object):
         info = 0.0
 
         state = self._env.reset()
+
         for i in range(self._env._max_episode_steps):
             step = i
             action, q_value = self._agent.act(state, train)
@@ -79,7 +80,7 @@ class Play(object):
 
             if terminal:
                 break
-        return np.mean(episode_rewards), np.squeeze(episode_q_values), step, info
+        return np.sum(episode_rewards), np.squeeze(episode_q_values), step, info
 
     def _set_seed(self, seed):
         self._env.seed(seed)
