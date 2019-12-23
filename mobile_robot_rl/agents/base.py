@@ -1,5 +1,6 @@
 import abc
 from typing import Any
+from typing import Dict
 from typing import Tuple
 from typing import Union
 
@@ -8,9 +9,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 import tqdm
-from gym.spaces.box import Box
-from torch.utils.tensorboard import SummaryWriter
 
+from mobile_robot_rl.common.history import VectorHistory
+from mobile_robot_rl.common.logger import Logger
 from mobile_robot_rl.common.memory import ReplayMemory
 from mobile_robot_rl.common.memory import Rollout
 
@@ -18,6 +19,7 @@ from mobile_robot_rl.common.memory import Rollout
 class BaseOffPolicy(abc.ABC):
     def __init__(self,
                  env: gym.Env,
+                 state_dim=None,
                  discount_factor: float = 0.99,
                  n_step: int = 1,
                  memory_capacity: int = int(1e5),
@@ -33,22 +35,20 @@ class BaseOffPolicy(abc.ABC):
                  logdir: str = './output',
                  seed: int = 1337):
         super(BaseOffPolicy, self).__init__()
+        self.step = 0
         self._env = env
         self._state = None
-        self._step = 0
         self._update_step = 0
         self._set_seeds(seed)
 
         self._device = torch.device(
             'cuda' if torch.cuda.is_available() else 'cpu')
 
-        self._state_dim = int(np.prod(self._env.observation_space.shape))
-        if isinstance(self._env.action_space, Box):
-            self._action_dim = self._env.action_space.shape[0]
-            memory_action = self._action_dim
+        if state_dim is None:
+            self._state_dim = self._env.observation_space.shape[0]
         else:
-            self._action_dim = self._env.action_space.n
-            memory_action = 1
+            self._state_dim = state_dim
+        self._action_dim = self._env.action_space.shape[0]
 
         self._discount = discount_factor ** n_step
         self._n_step = n_step
@@ -67,51 +67,62 @@ class BaseOffPolicy(abc.ABC):
         self._memory = ReplayMemory(
             capacity=memory_capacity,
             state_dim=self._state_dim,
-            action_dim=memory_action,
+            action_dim=self._action_dim,
             combined=use_combined_experience_replay,
             torch_backend=True)
 
         self._rollout = Rollout(
             capacity=n_step,
             state_dim=self._state_dim,
-            action_dim=memory_action,
+            action_dim=self._action_dim,
             discount_factor=discount_factor)
 
-        self._writer = SummaryWriter(logdir)
+        self._logger = Logger(self, logdir)
+        self._vec_history = VectorHistory(
+            4, self._env.observation_space.shape[0], True)
 
-    def step(self, train: bool):
+    def _step(self, train: bool = False) -> Tuple[float, bool, Dict[str, bool]]:
         if train and self._memory.size < self._warm_up_steps:
-            action = np.random.uniform(-1.0, 1.0, (2, ))
+            action = np.random.uniform(-1.0, 1.0, (2,))
         else:
-            action = self._act(self._state, train)
-        next_state, reward, done, _ = self._env.step(action)
-        self._observe(self._state, action, reward, next_state, done)
+            action = self._act(self._state, True)
+        next_state, reward, done, info = self._env.step(action)
+        next_state = self._vec_history(next_state)
+        if train:
+            self._observe(self._state, action, reward, next_state, done)
         self._state = next_state
-        return reward, done
+        return reward, done, info
 
     def train(self, max_steps: int):
-        self._state = self._env.reset()
+        self._state = self._vec_history(self._env.reset())
         total_reward = []
         pb = tqdm.tqdm(total=max_steps)
-        while self._step < max_steps:
-            reward, done = self.step(True)
+        while self.step < max_steps:
+            reward, done, info = self._step(True)
             total_reward.append(reward)
             pb.update(1)
             if done:
-                self._state = self._env.reset()
-                if self._step > 0:
-                    self._log(sum(total_reward))
+                self._state = self._vec_history(self._env.reset())
+                if self.step > 0:
+                    self._logger.log_train(sum(total_reward),
+                                           info['is_success'])
                 total_reward = []
+            if self.step % 25000 == 24999:
+                self._run_test()
         pb.close()
+        self._env.close()
+        self._logger.save_results()
 
-    def eval(self, render: bool = False):
-        self._state = self._env.reset()
+    def eval(self, ) -> Tuple[float, bool]:
+        self._state = self._vec_history(self._env.reset())
+        total_reward = 0.0
         while True:
-            if render:
-                self._env.render()
-            _, done = self.step(False)
+            reward, done, info = self._step(False)
+            total_reward += reward
             if done:
                 break
+
+        return total_reward, info['is_success']
 
     def _observe(self,
                  state: Union[np.ndarray, torch.Tensor],
@@ -125,13 +136,19 @@ class BaseOffPolicy(abc.ABC):
             return
         self._memory.push(*transition)
         if self._memory.size >= self._warm_up_steps:
-            self._step += 1
-            if self._step % self._update_frequency == 0:
+            self.step += 1
+            if self.step % self._update_frequency == 0:
                 for _ in range(self._update_steps):
                     self._update_step += 1
                     self._update()
         if done:
             self._rollout.reset()
+
+    def _run_test(self):
+        results = [self.eval() for _ in range(10)]
+        rewards, success = zip(*results)
+        self._logger.log_test(rewards, success)
+        self._state = self._vec_history(self._env.reset())
 
     def _update_target(self, model: nn.Module, target_model: nn.Module):
         if self._use_soft_update:
@@ -159,15 +176,6 @@ class BaseOffPolicy(abc.ABC):
     def _set_seeds(seed):
         torch.random.manual_seed(seed)
         np.random.seed(seed)
-
-    def _log(self, reward):
-        self._writer.add_scalar('reward', reward, self._step)
-        for name, param in self.parameters:
-            self._writer.add_histogram(
-                'main/{}'.format(name), param, self._step)
-        for name, param in self.target_parameters:
-            self._writer.add_histogram(
-                'target/{}'.format(name), param, self._step)
 
     @property
     @abc.abstractmethod

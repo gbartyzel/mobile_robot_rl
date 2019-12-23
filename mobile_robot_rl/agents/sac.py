@@ -1,3 +1,4 @@
+import os
 import copy
 from typing import NoReturn
 
@@ -126,15 +127,16 @@ class SAC(BaseOffPolicy):
                 self._pi.load_state_dict(model['actor'])
                 self._qv.load_state_dict(model['critic'])
                 self._target_qv.load_state_dict(model['target_critic'])
-                self._step = model['step']
+                self.step = model['step']
 
-    def save(self):
+    def save(self, path: str = './'):
         state_dict = dict()
         state_dict['actor'] = self._pi.state_dict(),
         state_dict['critic'] = self._qv.state_dict()
         state_dict['target_critic'] = self._target_qv.state_dict()
-        state_dict['step'] = self._step
-        torch.save(state_dict, 'model_{}.pth'.format(self._step))
+        state_dict['step'] = self.step
+        torch.save(state_dict,
+                   os.path.join(path, 'model_{}.pth'.format(self.step)))
 
     @property
     def parameters(self):

@@ -103,20 +103,22 @@ class TimeSeriesNetwork(nn.Module):
 
         self._body = nn.Sequential(
             nn.Conv1d(input_dim, 16, 3, padding=1),
-            nn.InstanceNorm1d(16),
             nn.ReLU(),
             nn.Conv1d(16, 16, 2),
-            nn.InstanceNorm1d(16),
             nn.ReLU(),
             nn.Conv1d(16, 16, 2),
-            nn.InstanceNorm1d(16),
             nn.ReLU(),
         )
-        self.output_dim = 112
+        self._output_dim = 112
+        self.output_dim = 128
+        self._fc_1 = nn.Linear(self._output_dim, 128)
+        self._fc_2 = nn.Linear(128, 128)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self._body(x)
-        x = x.view(-1, self.output_dim)
+        x = x.view(-1, self._output_dim)
+        x = F.relu(self._fc_1(x))
+        x = F.relu(self._fc_2(x))
         return x
 
 
@@ -129,13 +131,10 @@ class TimeSeriesCriticNetwork(nn.Module):
 
         self._body = nn.Sequential(
             nn.Conv1d(input_dim[0], 16, 3, padding=1),
-            nn.InstanceNorm1d(16),
             nn.ReLU(),
             nn.Conv1d(16, 16, 2),
-            nn.InstanceNorm1d(16),
             nn.ReLU(),
             nn.Conv1d(16, 16, 2),
-            nn.InstanceNorm1d(16),
             nn.ReLU(),
         )
         self._output_dim = 112

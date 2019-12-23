@@ -104,6 +104,7 @@ class ReplayMemory(object):
         idxs = np.random.randint((self.size - 1), size=batch_size)
         if self._combined:
             idxs = np.append(idxs, np.array(self.size - 1, dtype=np.int32))
+
         batch = Batch(
             state=self._state_buffer.sample(idxs, device),
             action=self._action_buffer.sample(idxs, device),
@@ -129,14 +130,17 @@ class ReplayMemory(object):
 class Rollout:
     def __init__(self,
                  capacity: int,
-                 state_dim: int,
+                 state_dim: Union[int, Tuple[int, int]],
                  action_dim: int,
                  discount_factor: float):
         self._size = 0
         self._capacity = capacity
         self._discount_factor = discount_factor
 
-        self._state_buffer = np.zeros((capacity, state_dim))
+        if isinstance(state_dim, tuple):
+            self._state_buffer = np.zeros((capacity, ) + state_dim)
+        else:
+            self._state_buffer = np.zeros((capacity, state_dim))
         self._action_buffer = np.zeros((capacity, action_dim))
         self._reward_buffer = np.zeros((capacity, 1))
 
@@ -182,13 +186,14 @@ class Rollout:
 
 
 if __name__ == '__main__':
-    mem = ReplayMemory(100, 3, 2)
+    mem = ReplayMemory(100000, (4, 9), 2)
 
-    for i in range(102):
-        state = np.ones(3) * i
-        action = np.ones(2) * (i * 2)
-        rewrd = np.sqrt(i)
-        next_state = np.ones(3) * (i + 1)
+    for i in range(100000):
+        state = np.random.rand(4, 9)
+        action = np.random.rand(2)
+        rewrd = 1.0
+        next_state = np.random.rand(4, 9)
         mem.push(state, action, rewrd, next_state, False)
 
-    print(mem[1])
+    batch = mem.sample(32)
+    print(batch.state)
