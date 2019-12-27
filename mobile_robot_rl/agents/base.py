@@ -30,6 +30,8 @@ class BaseOffPolicy(abc.ABC):
                  update_frequency: int = 1,
                  target_update_frequency: int = 1000,
                  update_steps: int = 4,
+                 history_length: int = 4,
+                 unroll_history: bool = False,
                  use_soft_update: bool = False,
                  use_combined_experience_replay: bool = False,
                  logdir: str = './output',
@@ -78,8 +80,9 @@ class BaseOffPolicy(abc.ABC):
             discount_factor=discount_factor)
 
         self._logger = Logger(self, logdir)
-        self._vec_history = VectorHistory(
-            4, self._env.observation_space.shape[0], True)
+        self._vec_history = VectorHistory(history_length,
+                                          self._env.observation_space.shape[0],
+                                          unroll_history)
 
     def _step(self, train: bool = False) -> Tuple[float, bool, Dict[str, bool]]:
         if train and self._memory.size < self._warm_up_steps:

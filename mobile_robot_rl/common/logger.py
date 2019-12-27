@@ -1,4 +1,5 @@
 import os
+import datetime
 from typing import List
 
 import numpy as np
@@ -11,9 +12,9 @@ class Logger:
                  agent,
                  log_dir: str = './output'):
         self._agent = agent
-        self._log_dir = log_dir
-        self._train_writer = SummaryWriter(os.path.join(log_dir, 'train'))
-        self._test_writer = SummaryWriter(os.path.join(log_dir, 'test'))
+        self._log_dir = self._create_logdir(log_dir)
+        self._train_writer = SummaryWriter(os.path.join(self._log_dir, 'train'))
+        self._test_writer = SummaryWriter(os.path.join(self._log_dir, 'test'))
 
         self._sucess_rate_container = list()
         self._reward_container = list()
@@ -52,3 +53,10 @@ class Logger:
                    self._sucess_rate_container)
         df = pd.DataFrame(data, columns=['steps', 'rewards', 'success_rate'])
         df.to_csv(os.path.join(self._log_dir, 'results.csv'))
+
+    @staticmethod
+    def _create_logdir(log_dir: str) -> str:
+        if not os.path.isdir(log_dir):
+            os.mkdir(log_dir)
+        now = datetime.datetime.now().strftime('%d_%m_%y_%H_%M_%S')
+        return os.path.join(log_dir, now)
