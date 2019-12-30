@@ -94,60 +94,62 @@ class BNMLPNetwork(BaseMLPNetwork):
         return x
 
 
-class TimeSeriesNetwork(nn.Module):
+class FusionModel(nn.Module):
     def __init__(self,
                  input_dim: int,
-                 activation_fn: Callable = F.relu):
-        super(TimeSeriesNetwork, self).__init__()
-        self._activation_fn = activation_fn
+                 input_channel: int,
+                 hidden_dim: Tuple[int, ...]):
+        super(FusionModel, self).__init__()
+        self.output_dim = hidden_dim[-1]
 
-        self._body = nn.Sequential(
-            nn.Conv1d(input_dim, 16, 3, padding=1),
+        self._vision_body = nn.Sequential(
+            nn.Conv2d(input_channel, 32, 5, 3),
             nn.ReLU(),
-            nn.Conv1d(16, 16, 2),
+            nn.Conv2d(32, 32, 5, 3),
             nn.ReLU(),
-            nn.Conv1d(16, 16, 2),
-            nn.ReLU(),
+            nn.Conv2d(32, 32, 5, 3)
         )
-        self._output_dim = 112
-        self.output_dim = 128
-        self._fc_1 = nn.Linear(self._output_dim, 128)
-        self._fc_2 = nn.Linear(128, 128)
+        self._vision_output_dim = 32 * 3 * 3
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self._body(x)
-        x = x.view(-1, self._output_dim)
-        x = F.relu(self._fc_1(x))
-        x = F.relu(self._fc_2(x))
+        self._size = len(hidden_dim)
+        self._body = nn.ModuleList()
+        layers = (self._vision_output_dim + input_dim,) + hidden_dim
+        for i in range(self._size):
+            self._body.append(nn.Linear(layers[i], layers[i + 1]))
+
+    def forward(self,
+                x_vector: torch.Tensor,
+                x_image: torch.Tensor) -> torch.Tensor:
+        x_image = self._vision_body(x_image).view(-1, self._vision_output_dim)
+        x = torch.cat((x_vector, x_image), dim=1)
+        for layer in self._body:
+            x = F.relu(layer(x))
         return x
 
 
-class TimeSeriesCriticNetwork(nn.Module):
+class CriticFusionModel(nn.Module):
     def __init__(self,
-                 input_dim: Tuple[int, int],
-                 activation_fn: Callable = F.relu):
-        super(TimeSeriesCriticNetwork, self).__init__()
-        self._activation_fn = activation_fn
+                 action_dim: int,
+                 hidden_dim: Tuple[int, ...],
+                 fusion_model: FusionModel):
+        super(CriticFusionModel, self).__init__()
 
-        self._body = nn.Sequential(
-            nn.Conv1d(input_dim[0], 16, 3, padding=1),
-            nn.ReLU(),
-            nn.Conv1d(16, 16, 2),
-            nn.ReLU(),
-            nn.Conv1d(16, 16, 2),
-            nn.ReLU(),
-        )
-        self._output_dim = 112
+        self._fusion_body = fusion_model
 
-        self.output_dim = 128
+        self._size = len(hidden_dim)
+        self._body = nn.ModuleList()
+        layers = (self._fusion_body.output_dim + action_dim,) + hidden_dim
+        for i in range(self._size):
+            self._body.append(nn.Linear(layers[i], layers[i + 1]))
 
-        self._fc_1 = nn.Linear(input_dim[1] + self._output_dim, 128)
-        self._fc_2 = nn.Linear(128, 128)
+        self.output_dim = hidden_dim[-1] + self._fusion_body.output_dim
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        u = x[1]
-        x = self._body(x[0])
-        x = x.view(-1, self._output_dim)
-        x = F.relu(self._fc_1(torch.cat((x, u), 1)))
-        x = F.relu(self._fc_2(x))
+    def forward(self,
+                x_action: torch.Tensor,
+                x_vector: torch.Tensor,
+                x_image: torch.Tensor) -> torch.Tensor:
+        x_obs = self._fusion_body(x_vector, x_image)
+        x = torch.cat((x_action, x_obs), dim=1)
+        for layer in self._body:
+            x = F.relu(layer(x))
         return x
