@@ -1,4 +1,6 @@
 import copy
+import numpy as np
+import torch
 from collections import namedtuple
 from typing import Any
 from typing import Dict
@@ -6,16 +8,14 @@ from typing import Sequence
 from typing import Tuple
 from typing import Union
 
-import numpy as np
-import torch
+Batch = namedtuple('Batch', 'state action reward next_state mask')
+Dimension = namedtuple('Dimension', 'shape dtype')
 
 _DATA_TYPE = Union[np.ndarray, torch.Tensor]
 _DIM_TYPE = Union[int, Sequence[int]]
 _DICT_DATE_TYPE = Union[Dict[str, _DATA_TYPE], _DATA_TYPE]
-_DICT_DIM_TYPE = Union[_DIM_TYPE, Dict[str, _DIM_TYPE]]
+_DICT_DIM_TYPE = Union[Dimension, Dict[str, Dimension]]
 _TRANSITION = Tuple[_DICT_DATE_TYPE, np.ndarray, _DICT_DATE_TYPE, float, bool]
-
-Batch = namedtuple('Batch', 'state action reward next_state mask')
 
 
 class RingBuffer:
@@ -23,16 +23,15 @@ class RingBuffer:
 
     def __init__(self,
                  capacity: int,
-                 dimension: _DIM_TYPE,
-                 dtype: np.dtype):
+                 dimension: Dimension):
         self._size = 0
-        self._capacity = capacity
-        self._dimension = self._to_tuple(dimension)
-        self._container = np.zeros((capacity,) + self._dimension, dtype=dtype)
+        self._dimension = (capacity,) + self._to_tuple(dimension.shape)
+        self._dtype = dimension.dtype
+        self._container = np.zeros(self._dimension, dimension.dtype)
 
     def add(self, value: Any):
         self._container[self._size, :] = value
-        self._size = (self._size + 1) % self._capacity
+        self._size = (self._size + 1) % self._dimension[0]
 
     def sample(self,
                idx: Union[Sequence[int], torch.Tensor],
@@ -43,7 +42,7 @@ class RingBuffer:
         return batch
 
     def reset(self):
-        self._container = np.zeros((self._capacity,) + self._dimension)
+        self._container = np.zeros(self._dimension, self._dtype)
 
     @property
     def size(self) -> int:
@@ -80,12 +79,10 @@ _STATE_BUFFER = Union[RingBuffer, Dict[str, RingBuffer]]
 class ReplayMemory(object):
     def __init__(self,
                  capacity: int,
-                 state_dim: Union[int, Sequence[int]],
-                 action_dim: Union[int, Sequence[int]],
-                 state_dtype: Union[Dict[str, np.dtype], np.dtype],
-                 action_dtype: np.dtype = np.float32,
-                 reward_dtype: np.dtype = np.float32,
-                 terminal_dtype: np.dtype = np.float32,
+                 state_dim: _DICT_DIM_TYPE,
+                 action_dim: Dimension,
+                 reward_dim: Dimension = Dimension(1, np.float32),
+                 terminal_dim: Dimension = Dimension(1, np.float32),
                  combined: bool = False,
                  torch_backend: bool = False):
         RingBuffer.TORCH_BACKEND = torch_backend
@@ -94,14 +91,14 @@ class ReplayMemory(object):
         self._size = 0
 
         if isinstance(state_dim, dict):
-            self._state_buffer = {k: RingBuffer(capacity, v, state_dtype[k])
-                                  for k, v in state_dim.items()}
+            self._state_buffer = {key: RingBuffer(capacity, value)
+                                  for key, value in state_dim.items()}
         else:
-            self._state_buffer = RingBuffer(capacity, state_dim, state_dtype)
-        self._action_buffer = RingBuffer(capacity, action_dim, action_dtype)
-        self._reward_buffer = RingBuffer(capacity, 1, reward_dtype)
+            self._state_buffer = RingBuffer(capacity, state_dim)
+        self._action_buffer = RingBuffer(capacity, action_dim)
+        self._reward_buffer = RingBuffer(capacity, reward_dim)
         self._next_state_buffer = copy.deepcopy(self._state_buffer)
-        self._mask_buffer = RingBuffer(capacity, 1, terminal_dtype)
+        self._mask_buffer = RingBuffer(capacity, terminal_dim)
 
     def push(self,
              state: _DICT_DATE_TYPE,
@@ -171,22 +168,20 @@ class ReplayMemory(object):
 class Rollout:
     def __init__(self,
                  capacity: int,
-                 state_dim: _DICT_DIM_TYPE,
-                 action_dim: int,
-                 discount_factor: float,
-                 state_dtype: Union[Dict[str, np.dtype], np.dtype],
-                 action_dtype: np.dtype = np.float32):
+                 state_dim: Union[Dimension, Dict[str, Dimension]],
+                 action_dim: Dimension,
+                 discount_factor: float):
         self._size = 0
         self._capacity = capacity
         self._discount_factor = discount_factor
 
         if isinstance(state_dim, dict):
-            self._state_buffer = {k: self._create_buffer(v, state_dtype[k])
-                                  for k, v in state_dim.items()}
+            self._state_buffer = {key: self._create_buffer(value)
+                                  for key, value in state_dim.items()}
         else:
-            self._state_buffer = self._create_buffer(state_dim, state_dtype)
-        self._action_buffer = self._create_buffer(action_dim, action_dtype)
-        self._reward_buffer = self._create_buffer(1)
+            self._state_buffer = self._create_buffer(state_dim)
+        self._action_buffer = self._create_buffer(action_dim)
+        self._reward_buffer = self._create_buffer(Dimension(1, np.float32))
 
     @property
     def ready(self) -> int:
@@ -245,9 +240,15 @@ class Rollout:
         buffer[-1] = value
         return buffer
 
-    def _create_buffer(self,
-                       dim: int,
-                       dtype: np.dtype = np.float32) -> _DICT_DATE_TYPE:
-        if isinstance(dim, tuple):
-            return np.zeros((self._capacity,) + dim, dtype=dtype)
-        return np.zeros((self._capacity, dim), dtype=dtype)
+    def _create_buffer(self, dim: Dimension) -> _DICT_DATE_TYPE:
+        if isinstance(dim.shape, tuple):
+            return np.zeros((self._capacity,) + dim.shape, dim.dtype)
+        return np.zeros((self._capacity, dim.shape), dim.dtype)
+
+
+if __name__ == '__main__':
+    state_dim = Dimension(shape=(4, 128, 128), dtype=np.uint8)
+    action_dim = Dimension(shape=2, dtype=np.float32)
+
+    memory = ReplayMemory(100, state_dim, action_dim)
+    rollout = Rollout(5, state_dim, action_dim, 0.99)

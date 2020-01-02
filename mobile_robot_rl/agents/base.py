@@ -1,17 +1,17 @@
 import abc
-from typing import Any
-from typing import Dict
-from typing import Tuple
-from typing import Union
-
 import gym
 import numpy as np
 import torch
 import torch.nn as nn
 import tqdm
+from typing import Any
+from typing import Dict
+from typing import Tuple
+from typing import Union
 
 from mobile_robot_rl.common.history import VectorHistory
 from mobile_robot_rl.common.logger import Logger
+from mobile_robot_rl.common.memory import Dimension
 from mobile_robot_rl.common.memory import ReplayMemory
 from mobile_robot_rl.common.memory import Rollout
 
@@ -19,7 +19,7 @@ from mobile_robot_rl.common.memory import Rollout
 class BaseOffPolicy(abc.ABC):
     def __init__(self,
                  env: gym.Env,
-                 state_dim=None,
+                 state_dim: Dimension = None,
                  discount_factor: float = 0.99,
                  n_step: int = 1,
                  memory_capacity: int = int(1e5),
@@ -46,11 +46,15 @@ class BaseOffPolicy(abc.ABC):
         self._device = torch.device(
             'cuda' if torch.cuda.is_available() else 'cpu')
 
+        print(state_dim)
         if state_dim is None:
-            self._state_dim = self._env.observation_space.shape[0]
+            self._state_dim = Dimension(
+                shape=self._env.observation_space.shape[0],
+                dtype=self._env.observation_space.dtype)
         else:
             self._state_dim = state_dim
-        self._action_dim = self._env.action_space.shape[0]
+        self._action_dim = Dimension(shape=self._env.action_space.shape[0],
+                                     dtype=self._env.action_space.dtype)
 
         self._discount = discount_factor ** n_step
         self._n_step = n_step
@@ -80,9 +84,9 @@ class BaseOffPolicy(abc.ABC):
             discount_factor=discount_factor)
 
         self._logger = Logger(self, logdir)
-        self._vec_history = VectorHistory(history_length,
-                                          self._env.observation_space.shape[0],
-                                          unroll_history)
+        self._history = VectorHistory(history_length,
+                                      self._state_dim['scalars'].shape,
+                                      unroll_history)
 
     def _step(self, train: bool = False) -> Tuple[float, bool, Dict[str, bool]]:
         if train and self._memory.size < self._warm_up_steps:
@@ -90,14 +94,14 @@ class BaseOffPolicy(abc.ABC):
         else:
             action = self._act(self._state, True)
         next_state, reward, done, info = self._env.step(action)
-        next_state = self._vec_history(next_state)
+        next_state = self._history(next_state)
         if train:
             self._observe(self._state, action, reward, next_state, done)
         self._state = next_state
         return reward, done, info
 
     def train(self, max_steps: int):
-        self._state = self._vec_history(self._env.reset())
+        self._state = self._history(self._env.reset())
         total_reward = []
         pb = tqdm.tqdm(total=max_steps)
         while self.step < max_steps:
@@ -105,7 +109,7 @@ class BaseOffPolicy(abc.ABC):
             total_reward.append(reward)
             pb.update(1)
             if done:
-                self._state = self._vec_history(self._env.reset())
+                self._state = self._history(self._env.reset())
                 if self.step > 0:
                     self._logger.log_train(sum(total_reward),
                                            info['is_success'])
@@ -117,7 +121,7 @@ class BaseOffPolicy(abc.ABC):
         self._logger.save_results()
 
     def eval(self, ) -> Tuple[float, bool]:
-        self._state = self._vec_history(self._env.reset())
+        self._state = self._history(self._env.reset())
         total_reward = 0.0
         while True:
             reward, done, info = self._step(False)
@@ -151,7 +155,7 @@ class BaseOffPolicy(abc.ABC):
         results = [self.eval() for _ in range(10)]
         rewards, success = zip(*results)
         self._logger.log_test(rewards, success)
-        self._state = self._vec_history(self._env.reset())
+        self._state = self._history(self._env.reset())
 
     def _update_target(self, model: nn.Module, target_model: nn.Module):
         if self._use_soft_update:

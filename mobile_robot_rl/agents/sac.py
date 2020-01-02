@@ -1,11 +1,10 @@
-import os
 import copy
-from typing import NoReturn
-
 import numpy as np
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from typing import NoReturn
 
 from mobile_robot_rl.agents.base import BaseOffPolicy
 from mobile_robot_rl.common.memory import Batch
@@ -31,7 +30,7 @@ class SAC(BaseOffPolicy):
         self._qvs_grad_norm_value = qv_grad_norm_value
 
         self._pi = GaussianActor(
-            pi_phi, self._action_dim).to(self._device)
+            pi_phi, self._action_dim.shape).to(self._device)
         self._pi_optim = optim.Adam(self._pi.parameters(), pi_lrate)
 
         self._qv = DoubleCritic(qv_phi).to(self._device)
@@ -41,7 +40,7 @@ class SAC(BaseOffPolicy):
 
         self._alpha_tuning = alpha_tuning
         if alpha_tuning:
-            self._target_entropy = -np.prod(self._action_dim)
+            self._target_entropy = -np.prod(self._action_dim.shape)
             self._log_alpha = torch.zeros(
                 1, requires_grad=True, device=self._device)
             self._alpha_optim = optim.Adam([self._log_alpha], lr=alpha_lrate)
