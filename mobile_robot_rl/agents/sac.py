@@ -1,10 +1,11 @@
 import copy
-import numpy as np
 import os
+from typing import NoReturn
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from typing import NoReturn
 
 from mobile_robot_rl.agents.base import BaseOffPolicy
 from mobile_robot_rl.common.memory import Batch
@@ -50,7 +51,7 @@ class SAC(BaseOffPolicy):
         self._target_qv.load_state_dict(self._qv.state_dict())
 
     def _act(self, state: np.ndarray, train: bool = False) -> np.ndarray:
-        state = torch.from_numpy(state).float().unsqueeze(0).to(self._device)
+        state = self._convert_np_state(state)
         self._pi.eval()
         with torch.no_grad():
             if train:
@@ -66,20 +67,22 @@ class SAC(BaseOffPolicy):
         self._update_target(self._qv, self._target_qv)
 
     def _compute_loses(self, batch: Batch):
+        state = self._convert_tensor_state(batch.state)
+        next_state = self._convert_tensor_state(batch.next_state)
 
         with torch.no_grad():
-            next_action, log_prob, _ = self._pi(batch.next_state)
-            target_next_q = torch.min(*self._target_qv(batch.next_state,
-                                                       next_action))
+            next_action, log_prob, _ = self._pi(next_state)
+            target_next_q = torch.min(*self._target_qv(
+                (next_action,) + next_state))
             target_next_v = target_next_q - self._alpha * log_prob
             target_q = self._td_target(batch.reward, batch.mask, target_next_v)
-        expected_q1, expected_q2 = self._qv(batch.state, batch.action)
+        expected_q1, expected_q2 = self._qv((batch.action,) + state)
 
         q1_loss = mse_loss(expected_q1, target_q)
         q2_loss = mse_loss(expected_q2, target_q)
 
-        action, log_prob, _ = self._pi(batch.state)
-        target_log_prob = torch.min(*self._qv(batch.state, action))
+        action, log_prob, _ = self._pi(state)
+        target_log_prob = torch.min(*self._qv((action,) + state))
         policy_loss = torch.mean(self._alpha * log_prob - target_log_prob)
 
         if self._alpha_tuning:

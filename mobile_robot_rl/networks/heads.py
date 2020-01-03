@@ -5,8 +5,6 @@ from typing import Tuple
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.distributions.categorical import Categorical
 from torch.distributions.multivariate_normal import MultivariateNormal
 
 from mobile_robot_rl.networks.noisy_linear import FactorizedNoisyLinear
@@ -149,4 +147,3 @@ class GaussianPolicyHead(nn.Module):
                            eps: float = 1e-6) -> torch.Tensor:
         return torch.log(
             1.0 - torch.tanh(action).pow(2) + eps).sum(-1, keepdim=True)
-

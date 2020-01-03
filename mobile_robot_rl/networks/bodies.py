@@ -17,7 +17,7 @@ def fan_init(x: nn.Parameter):
 
 def orthogonal_init(x: nn.Module):
     classname = x.__class__.__name__
-    if classname.find('Linear') != -1:
+    if classname.find('Linear') != -1 or classname.find('Conv2d') != -1:
         nn.init.orthogonal_(x.weight.data, gain=np.sqrt(2))
         nn.init.constant_(x.bias.data, 0.0)
 
@@ -103,19 +103,22 @@ class FusionModel(nn.Module):
         self.output_dim = hidden_dim[-1]
 
         self._vision_body = nn.Sequential(
-            nn.Conv2d(input_channel, 32, 5, 3),
+            nn.Conv2d(input_channel, 32, 3, 2),
             nn.ReLU(),
-            nn.Conv2d(32, 32, 5, 3),
+            nn.Conv2d(32, 32, 3, 3),
             nn.ReLU(),
-            nn.Conv2d(32, 32, 5, 3)
+            nn.Conv2d(32, 32, 3, 3),
+            nn.ReLU(),
         )
-        self._vision_output_dim = 32 * 3 * 3
+        self._vision_output_dim = 288
 
         self._size = len(hidden_dim)
         self._body = nn.ModuleList()
         layers = (self._vision_output_dim + input_dim,) + hidden_dim
         for i in range(self._size):
             self._body.append(nn.Linear(layers[i], layers[i + 1]))
+
+        self.reset_parameters()
 
     def forward(self,
                 x_vector: torch.Tensor,
@@ -125,6 +128,11 @@ class FusionModel(nn.Module):
         for layer in self._body:
             x = F.relu(layer(x))
         return x
+
+    def reset_parameters(self):
+        for layer in self._body:
+            orthogonal_init(layer)
+        self._vision_body.apply(orthogonal_init)
 
 
 class CriticFusionModel(nn.Module):
@@ -142,14 +150,20 @@ class CriticFusionModel(nn.Module):
         for i in range(self._size):
             self._body.append(nn.Linear(layers[i], layers[i + 1]))
 
-        self.output_dim = hidden_dim[-1] + self._fusion_body.output_dim
+        self.output_dim = hidden_dim[-1]
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        for layer in self._body:
+            orthogonal_init(layer)
 
     def forward(self,
                 x_action: torch.Tensor,
                 x_vector: torch.Tensor,
                 x_image: torch.Tensor) -> torch.Tensor:
         x_obs = self._fusion_body(x_vector, x_image)
-        x = torch.cat((x_action, x_obs), dim=1)
+        x = torch.cat((x_obs, x_action), dim=1)
         for layer in self._body:
             x = F.relu(layer(x))
         return x

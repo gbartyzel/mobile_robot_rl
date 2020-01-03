@@ -20,6 +20,8 @@ class Critic(nn.Module):
         self._value = ValueHead(self._phi.output_dim)
 
     def forward(self, *x: Tuple[torch.Tensor, ...]) -> torch.Tensor:
+        if isinstance(x, tuple):
+            return self._value(self._phi(*x))
         return self._value(self._phi(x))
 
 
@@ -60,7 +62,7 @@ class DoubleCritic(nn.Module):
         return self._critic_2.parameters()
 
     def forward(self,
-                *x: Tuple[torch.Tensor, ...]) -> Tuple[torch.Tensor, ...]:
+                x: Tuple[torch.Tensor, ...]) -> Tuple[torch.Tensor, ...]:
         return self._critic_1(*x), self._critic_2(*x)
 
 
@@ -106,4 +108,18 @@ class GaussianActor(nn.Module):
                 x: torch.Tensor,
                 raw_action: Optional[torch.Tensor] = None,
                 deterministic: bool = False) -> Tuple[torch.Tensor, ...]:
+        if isinstance(x, tuple):
+            return self._head.sample(self._phi(*x), raw_action, deterministic)
         return self._head.sample(self._phi(x), raw_action, deterministic)
+
+
+if __name__ == '__main__':
+    from mobile_robot_rl.networks.bodies import FusionModel, CriticFusionModel
+
+    fusion_model = CriticFusionModel(2, (256,), FusionModel(14, 4, (512, 256)))
+    model = DoubleCritic(fusion_model)
+
+    print(model)
+    print(model((torch.rand(1, 2),
+                torch.rand(1, 14),
+                torch.rand(1, 4, 64, 64))))

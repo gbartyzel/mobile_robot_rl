@@ -1,15 +1,16 @@
 import abc
-import gym
-import numpy as np
-import torch
-import torch.nn as nn
-import tqdm
 from typing import Any
 from typing import Dict
 from typing import Tuple
 from typing import Union
 
-from mobile_robot_rl.common.history import VectorHistory
+import gym
+import numpy as np
+import torch
+import torch.nn as nn
+import tqdm
+
+from mobile_robot_rl.common.history import BaseHistory
 from mobile_robot_rl.common.logger import Logger
 from mobile_robot_rl.common.memory import Dimension
 from mobile_robot_rl.common.memory import ReplayMemory
@@ -30,8 +31,7 @@ class BaseOffPolicy(abc.ABC):
                  update_frequency: int = 1,
                  target_update_frequency: int = 1000,
                  update_steps: int = 4,
-                 history_length: int = 4,
-                 unroll_history: bool = False,
+                 history: BaseHistory = BaseHistory(1),
                  use_soft_update: bool = False,
                  use_combined_experience_replay: bool = False,
                  logdir: str = './output',
@@ -46,7 +46,6 @@ class BaseOffPolicy(abc.ABC):
         self._device = torch.device(
             'cuda' if torch.cuda.is_available() else 'cpu')
 
-        print(state_dim)
         if state_dim is None:
             self._state_dim = Dimension(
                 shape=self._env.observation_space.shape[0],
@@ -84,9 +83,7 @@ class BaseOffPolicy(abc.ABC):
             discount_factor=discount_factor)
 
         self._logger = Logger(self, logdir)
-        self._history = VectorHistory(history_length,
-                                      self._state_dim['scalars'].shape,
-                                      unroll_history)
+        self._history = history
 
     def _step(self, train: bool = False) -> Tuple[float, bool, Dict[str, bool]]:
         if train and self._memory.size < self._warm_up_steps:
@@ -174,6 +171,21 @@ class BaseOffPolicy(abc.ABC):
                    mask: torch.Tensor,
                    next_value: torch.Tensor) -> torch.Tensor:
         return reward + mask * self._discount * next_value
+
+    def _convert_np_state(self, state):
+        if isinstance(state, dict):
+            return (
+                torch.from_numpy(state['scalars']).float().unsqueeze(0).to(
+                    self._device),
+                torch.from_numpy(state['image']).float().unsqueeze(0).to(
+                    self._device)
+            )
+        return torch.from_numpy(state).float().unsqueeze(0).to(self._device)
+
+    def _convert_tensor_state(self, state):
+        if isinstance(state, dict):
+            return state['scalars'].float(), state['image'].float()
+        return state.float()
 
     @staticmethod
     def _hard_update(model: nn.Module, target_model: nn.Module):
