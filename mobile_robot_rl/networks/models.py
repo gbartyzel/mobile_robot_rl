@@ -111,15 +111,3 @@ class GaussianActor(nn.Module):
         if isinstance(x, tuple):
             return self._head.sample(self._phi(*x), raw_action, deterministic)
         return self._head.sample(self._phi(x), raw_action, deterministic)
-
-
-if __name__ == '__main__':
-    from mobile_robot_rl.networks.bodies import FusionModel, CriticFusionModel
-
-    fusion_model = CriticFusionModel(2, (256,), FusionModel(14, 4, (512, 256)))
-    model = DoubleCritic(fusion_model)
-
-    print(model)
-    print(model((torch.rand(1, 2),
-                torch.rand(1, 14),
-                torch.rand(1, 4, 64, 64))))

@@ -41,6 +41,7 @@ class BaseOffPolicy(abc.ABC):
         self._env = env
         self._state = None
         self._update_step = 0
+        self._seed = seed
         self._set_seeds(seed)
 
         self._device = torch.device(
@@ -89,7 +90,7 @@ class BaseOffPolicy(abc.ABC):
         if train and self._memory.size < self._warm_up_steps:
             action = np.random.uniform(-1.0, 1.0, (2,))
         else:
-            action = self._act(self._state, True)
+            action = self._act(self._state, train)
         next_state, reward, done, info = self._env.step(action)
         next_state = self._history(next_state)
         if train:
@@ -119,6 +120,7 @@ class BaseOffPolicy(abc.ABC):
 
     def eval(self, ) -> Tuple[float, bool]:
         self._state = self._history(self._env.reset())
+        self._rollout.reset()
         total_reward = 0.0
         while True:
             reward, done, info = self._step(False)
@@ -149,10 +151,15 @@ class BaseOffPolicy(abc.ABC):
             self._rollout.reset()
 
     def _run_test(self):
-        results = [self.eval() for _ in range(10)]
+        results = list()
+        for i in range(10):
+            self._set_seeds(i)
+            results.append(self.eval())
         rewards, success = zip(*results)
         self._logger.log_test(rewards, success)
+        self._set_seeds(self._seed)
         self._state = self._history(self._env.reset())
+        self._rollout.reset()
 
     def _update_target(self, model: nn.Module, target_model: nn.Module):
         if self._use_soft_update:

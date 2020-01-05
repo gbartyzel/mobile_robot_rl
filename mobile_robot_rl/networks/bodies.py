@@ -56,7 +56,7 @@ class MLPNetwork(BaseMLPNetwork):
         for layer in self._body:
             orthogonal_init(layer)
 
-    def forward(self, x: Sequence[torch.Tensor]) -> torch.Tensor:
+    def forward(self, *x: Sequence[torch.Tensor]) -> torch.Tensor:
         if isinstance(x, tuple):
             x = torch.cat(x, dim=1)
         for layer in self._body:
@@ -103,14 +103,14 @@ class FusionModel(nn.Module):
         self.output_dim = hidden_dim[-1]
 
         self._vision_body = nn.Sequential(
-            nn.Conv2d(input_channel, 32, 3, 2),
+            nn.Conv2d(input_channel, 16, 3, 2),
             nn.ReLU(),
-            nn.Conv2d(32, 32, 3, 3),
+            nn.Conv2d(16, 32, 3, 2),
             nn.ReLU(),
             nn.Conv2d(32, 32, 3, 3),
             nn.ReLU(),
         )
-        self._vision_output_dim = 288
+        self._vision_output_dim = 128
 
         self._size = len(hidden_dim)
         self._body = nn.ModuleList()
