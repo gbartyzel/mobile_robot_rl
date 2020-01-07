@@ -96,7 +96,6 @@ class BNMLPNetwork(BaseMLPNetwork):
 
 class FusionModel(nn.Module):
     def __init__(self,
-                 input_dim: int,
                  input_channel: int,
                  hidden_dim: Tuple[int, ...]):
         super(FusionModel, self).__init__()
@@ -107,14 +106,25 @@ class FusionModel(nn.Module):
             nn.ReLU(),
             nn.Conv2d(16, 32, 3, 2),
             nn.ReLU(),
-            nn.Conv2d(32, 32, 3, 3),
+            nn.Conv2d(32, 32, 3, 2),
             nn.ReLU(),
         )
-        self._vision_output_dim = 128
+        self._vision_output_dim = 288
+
+        self._vector_body = nn.Sequential(
+            nn.Conv1d(input_channel, 16, 2, 1, padding=1),
+            nn.ReLU(),
+            nn.Conv1d(16, 16, 2, 1),
+            nn.ReLU(),
+            nn.Conv1d(16, 16, 2, 1),
+            nn.ReLU(),
+        )
+        self._vector_output_dim = 208
 
         self._size = len(hidden_dim)
         self._body = nn.ModuleList()
-        layers = (self._vision_output_dim + input_dim,) + hidden_dim
+        layers = (self._vision_output_dim +
+                  self._vector_output_dim,) + hidden_dim
         for i in range(self._size):
             self._body.append(nn.Linear(layers[i], layers[i + 1]))
 
@@ -124,6 +134,7 @@ class FusionModel(nn.Module):
                 x_vector: torch.Tensor,
                 x_image: torch.Tensor) -> torch.Tensor:
         x_image = self._vision_body(x_image).view(-1, self._vision_output_dim)
+        x_vector = self._vector_body(x_vector).view(-1, self._vector_output_dim)
         x = torch.cat((x_vector, x_image), dim=1)
         for layer in self._body:
             x = F.relu(layer(x))

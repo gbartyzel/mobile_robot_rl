@@ -16,13 +16,13 @@ def run_vision_env():
     action_dim = env.action_space.shape[0]
 
     state_dim = dict(
-        scalars=Dimension(4 * env.observation_space['scalars'].shape[0],
+        scalars=Dimension((4, env.observation_space['scalars'].shape[0]),
                           np.float32),
         image=Dimension((4, 32, 32), np.uint8))
 
-    history = FusionHistory(4, (32, 32), 14, True, 'scalars', 'image')
-    fusion_model = b.FusionModel(state_dim['scalars'].shape,
-                                 state_dim['image'].shape[0], (256, 256))
+    history = FusionHistory(4, (32, 32), 14, False, 'scalars', 'image')
+    fusion_model = b.FusionModel(state_dim['image'].shape[0], (256, ))
+
     agent_sac = agents.SAC(
         pi_phi=copy.deepcopy(fusion_model),
         qv_phi=b.CriticFusionModel(action_dim, (256,),
@@ -30,7 +30,7 @@ def run_vision_env():
         env=env,
         state_dim=state_dim,
         discount_factor=0.99,
-        memory_capacity=int(1e5),
+        memory_capacity=int(1e6),
         batch_size=256,
         warm_up_steps=10000,
         update_steps=1,
@@ -74,4 +74,4 @@ def run_env():
 
 
 if __name__ == '__main__':
-    run_env()
+    run_vision_env()

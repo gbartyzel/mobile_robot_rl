@@ -19,10 +19,12 @@ class Critic(nn.Module):
         self._phi = deepcopy(phi)
         self._value = ValueHead(self._phi.output_dim)
 
-    def forward(self, *x: Tuple[torch.Tensor, ...]) -> torch.Tensor:
-        if isinstance(x, tuple):
-            return self._value(self._phi(*x))
-        return self._value(self._phi(x))
+    def forward(self,
+                action: torch.Tensor,
+                state: Tuple[torch.Tensor, ...]) -> torch.Tensor:
+        if isinstance(state, tuple):
+            return self._value(self._phi(action, *state))
+        return self._value(self._phi(action, state))
 
 
 class DistributionalCritic(nn.Module):
@@ -62,8 +64,9 @@ class DoubleCritic(nn.Module):
         return self._critic_2.parameters()
 
     def forward(self,
-                x: Tuple[torch.Tensor, ...]) -> Tuple[torch.Tensor, ...]:
-        return self._critic_1(*x), self._critic_2(*x)
+                action: torch.Tensor,
+                state: Tuple[torch.Tensor, ...]) -> Tuple[torch.Tensor, ...]:
+        return self._critic_1(action, state), self._critic_2(action, state)
 
 
 class DeterministicActor(nn.Module):

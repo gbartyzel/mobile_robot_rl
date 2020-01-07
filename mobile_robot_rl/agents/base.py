@@ -98,10 +98,10 @@ class BaseOffPolicy(abc.ABC):
         self._state = next_state
         return reward, done, info
 
-    def train(self, max_steps: int):
+    def train(self, max_steps: int, test_interval: int = 25000):
         self._state = self._history(self._env.reset())
         total_reward = []
-        pb = tqdm.tqdm(total=max_steps)
+        pb = tqdm.tqdm(total=max_steps + self._warm_up_steps)
         while self.step < max_steps:
             reward, done, info = self._step(True)
             total_reward.append(reward)
@@ -112,15 +112,17 @@ class BaseOffPolicy(abc.ABC):
                     self._logger.log_train(sum(total_reward),
                                            info['is_success'])
                 total_reward = []
-            if self.step % 25000 == 24999:
+            if (self.step % test_interval) == (test_interval - 1):
                 self._run_test()
         pb.close()
         self._env.close()
         self._logger.save_results()
 
-    def eval(self, ) -> Tuple[float, bool]:
-        self._state = self._history(self._env.reset())
+    def eval(self, seed: int = None) -> Tuple[float, bool]:
+        if seed is not None:
+            self._set_seeds(seed)
         self._rollout.reset()
+        self._state = self._history(self._env.reset())
         total_reward = 0.0
         while True:
             reward, done, info = self._step(False)
@@ -151,15 +153,13 @@ class BaseOffPolicy(abc.ABC):
             self._rollout.reset()
 
     def _run_test(self):
-        results = list()
-        for i in range(10):
-            self._set_seeds(i)
-            results.append(self.eval())
+        results = [self.eval(i) for i in range(10)]
         rewards, success = zip(*results)
         self._logger.log_test(rewards, success)
         self._set_seeds(self._seed)
-        self._state = self._history(self._env.reset())
         self._rollout.reset()
+        self._state = self._history(self._env.reset())
+        self.step += 1
 
     def _update_target(self, model: nn.Module, target_model: nn.Module):
         if self._use_soft_update:
