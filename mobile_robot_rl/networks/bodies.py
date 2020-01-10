@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.utils.weight_norm import WeightNorm
 
 
 def fan_init(x: nn.Parameter):
@@ -102,24 +103,28 @@ class FusionModel(nn.Module):
         self.output_dim = hidden_dim[-1]
 
         self._vision_body = nn.Sequential(
-            nn.Conv2d(input_channel, 16, 3, 2),
-            nn.ReLU(),
-            nn.Conv2d(16, 32, 3, 2),
-            nn.ReLU(),
-            nn.Conv2d(32, 32, 3, 2),
-            nn.ReLU(),
+            nn.Conv2d(input_channel, 32, 3, 2, padding=1),
+            nn.ELU(),
+            nn.Conv2d(32, 32, 3, 2, padding=1),
+            nn.ELU(),
+            nn.Conv2d(32, 32, 3, 2, padding=1),
+            nn.ELU(),
+            nn.Conv2d(32, 32, 3, 2, padding=1),
+            nn.ELU(),
         )
-        self._vision_output_dim = 288
+        self._vision_output_dim = 512
 
         self._vector_body = nn.Sequential(
             nn.Conv1d(input_channel, 16, 2, 1, padding=1),
-            nn.ReLU(),
-            nn.Conv1d(16, 16, 2, 1),
-            nn.ReLU(),
-            nn.Conv1d(16, 16, 2, 1),
-            nn.ReLU(),
+            nn.ELU(),
+            nn.Conv1d(16, 16, 2, 1, padding=1),
+            nn.ELU(),
+            nn.Conv1d(16, 16, 2, 1, padding=1),
+            nn.ELU(),
+            nn.Conv1d(16, 16, 2, 1, padding=1),
+            nn.ELU(),
         )
-        self._vector_output_dim = 208
+        self._vector_output_dim = 288
 
         self._size = len(hidden_dim)
         self._body = nn.ModuleList()
@@ -136,14 +141,15 @@ class FusionModel(nn.Module):
         x_image = self._vision_body(x_image).view(-1, self._vision_output_dim)
         x_vector = self._vector_body(x_vector).view(-1, self._vector_output_dim)
         x = torch.cat((x_vector, x_image), dim=1)
-        for layer in self._body:
-            x = F.relu(layer(x))
+        for i in range(len(self._body)):
+            x = F.elu(self._body[i](x))
         return x
 
     def reset_parameters(self):
         for layer in self._body:
             orthogonal_init(layer)
         self._vision_body.apply(orthogonal_init)
+        self._vector_body.apply(orthogonal_init)
 
 
 class CriticFusionModel(nn.Module):
@@ -175,6 +181,10 @@ class CriticFusionModel(nn.Module):
                 x_image: torch.Tensor) -> torch.Tensor:
         x_obs = self._fusion_body(x_vector, x_image)
         x = torch.cat((x_obs, x_action), dim=1)
-        for layer in self._body:
-            x = F.relu(layer(x))
+        for i in range(len(self._body)):
+            x = F.elu(self._body[i](x))
         return x
+
+if __name__ == '__main__':
+    model = FusionModel(4, (512, ))
+    model(torch.rand(1, 4, 14), torch.rand(1, 4, 64, 64))
