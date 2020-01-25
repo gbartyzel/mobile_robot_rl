@@ -119,7 +119,7 @@ class SAC(BaseOffPolicy):
             alpha_loss.backward()
             self._alpha_optim.step()
 
-            self._alpha = torch.exp(self._log_alpha)
+            self._alpha = torch.exp(self._log_alpha).clone().detach()
 
     def load(self, path: str = None) -> NoReturn:
         if path is not None:

@@ -30,7 +30,7 @@ class BaseOffPolicy(abc.ABC):
                  polyak_factor: float = 0.001,
                  update_frequency: int = 1,
                  target_update_frequency: int = 1000,
-                 update_steps: int = 4,
+                 update_steps: int = 1,
                  history: BaseHistory = BaseHistory(1),
                  use_soft_update: bool = False,
                  use_combined_experience_replay: bool = False,
@@ -185,13 +185,13 @@ class BaseOffPolicy(abc.ABC):
                 torch.from_numpy(state['scalars']).float().unsqueeze(0).to(
                     self._device),
                 torch.from_numpy(state['image']).float().unsqueeze(0).to(
-                    self._device)
+                    self._device) / 255.0
             )
         return torch.from_numpy(state).float().unsqueeze(0).to(self._device)
 
     def _convert_tensor_state(self, state):
         if isinstance(state, dict):
-            return state['scalars'].float(), state['image'].float()
+            return state['scalars'].float(), state['image'].float() / 255.0
         return state.float()
 
     @staticmethod

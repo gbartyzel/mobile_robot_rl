@@ -103,28 +103,26 @@ class FusionModel(nn.Module):
         self.output_dim = hidden_dim[-1]
 
         self._vision_body = nn.Sequential(
-            nn.Conv2d(input_channel, 32, 3, 2, padding=1),
-            nn.ELU(),
-            nn.Conv2d(32, 32, 3, 2, padding=1),
-            nn.ELU(),
-            nn.Conv2d(32, 32, 3, 2, padding=1),
-            nn.ELU(),
-            nn.Conv2d(32, 32, 3, 2, padding=1),
-            nn.ELU(),
+            nn.Conv2d(input_channel, 32, 3, 2, 1),
+            nn.LeakyReLU(inplace=True),
+            nn.Conv2d(32, 32, 3, 2, 1),
+            nn.LeakyReLU(inplace=True),
+            nn.Conv2d(32, 32, 3, 2, 1),
+            nn.LeakyReLU(inplace=True),
+            nn.Conv2d(32, 32, 3, 2, 1),
+            nn.LeakyReLU(inplace=True)
         )
         self._vision_output_dim = 512
 
         self._vector_body = nn.Sequential(
-            nn.Conv1d(input_channel, 16, 2, 1, padding=1),
-            nn.ELU(),
-            nn.Conv1d(16, 16, 2, 1, padding=1),
-            nn.ELU(),
-            nn.Conv1d(16, 16, 2, 1, padding=1),
-            nn.ELU(),
-            nn.Conv1d(16, 16, 2, 1, padding=1),
-            nn.ELU(),
+            nn.Conv1d(input_channel, 16, 2, 1, 1, dilation=1),
+            nn.LeakyReLU(inplace=True),
+            nn.Conv1d(16, 16, 2, 1, 1, dilation=2),
+            nn.LeakyReLU(inplace=True),
+            nn.Conv1d(16, 16, 2, 1, 1, dilation=4),
+            nn.LeakyReLU(inplace=True),
         )
-        self._vector_output_dim = 288
+        self._vector_output_dim = 208
 
         self._size = len(hidden_dim)
         self._body = nn.ModuleList()
@@ -142,7 +140,7 @@ class FusionModel(nn.Module):
         x_vector = self._vector_body(x_vector).view(-1, self._vector_output_dim)
         x = torch.cat((x_vector, x_image), dim=1)
         for i in range(len(self._body)):
-            x = F.elu(self._body[i](x))
+            x = F.leaky_relu(self._body[i](x))
         return x
 
     def reset_parameters(self):
@@ -182,7 +180,7 @@ class CriticFusionModel(nn.Module):
         x_obs = self._fusion_body(x_vector, x_image)
         x = torch.cat((x_obs, x_action), dim=1)
         for i in range(len(self._body)):
-            x = F.elu(self._body[i](x))
+            x = F.leaky_relu(self._body[i](x))
         return x
 
 if __name__ == '__main__':
