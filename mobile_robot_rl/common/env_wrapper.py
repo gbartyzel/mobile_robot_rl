@@ -57,7 +57,6 @@ class FrameStack(gym.Wrapper):
                 shp = value.shape
                 if len(shp) == 1:
                     shp = (1, shp[0]) if nchw else (shp[0], 1)
-
                 if nchw:
                     value.shape = ((shp[0] * k,) + shp[1:])
                 else:
@@ -86,7 +85,11 @@ class FrameStack(gym.Wrapper):
 
     def step(self, action):
         ob, reward, done, info = self.env.step(action)
-        self.frames.append(ob)
+        if isinstance(ob, dict):
+            for key, value in ob.items():
+                self.frames[key].append(value)
+        else:
+            self.frames.append(ob)
         return self._get_ob(), reward, done, info
 
     def _get_ob(self):
@@ -135,7 +138,7 @@ class LazyFrames:
 
 
 def make_env(env: gym.Env, length: int):
-    env = wrappers.RescaleAction(env, 0.0, 10.0)
+    env = wrappers.RescaleAction(env, -1.0, 1.0)
     env = ConvertImage(env, (64, 64), True, dict_key='image')
     env = FrameStack(env, length, True)
     return env

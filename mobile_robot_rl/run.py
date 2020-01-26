@@ -1,6 +1,7 @@
 import copy
 
 import gym
+import gym_vrep
 
 import mobile_robot_rl.agents as agents
 import mobile_robot_rl.networks.bodies as b
