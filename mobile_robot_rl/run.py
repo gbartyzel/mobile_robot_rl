@@ -7,10 +7,11 @@ import mobile_robot_rl.networks.bodies as b
 from mobile_robot_rl.common.env_wrapper import make_env
 
 
-def run_vision_env():
-    env = make_env(gym.make('DynamicRoomVisionNavigation-v0'), length=4)
+def run_vision_env(history_length):
+    env = make_env(gym.make('DynamicRoomVisionNavigation-v0'),
+                   length=history_length)
     action_dim = env.action_space.shape[0]
-    fusion_model = b.FusionModel(4, (512,))
+    fusion_model = b.FusionModel(history_length, (512,))
 
     agent_sac = agents.SAC(
         pi_phi=copy.deepcopy(fusion_model),
@@ -18,7 +19,7 @@ def run_vision_env():
                                    copy.deepcopy(fusion_model)),
         env=env,
         discount_factor=0.99,
-        memory_capacity=int(1e5),
+        memory_capacity=int(1e6),
         batch_size=64,
         warm_up_steps=10000,
         update_steps=1,
@@ -63,4 +64,4 @@ def run_env():
 
 
 if __name__ == '__main__':
-    env = make_env(gym.make('DynamicRoomVisionNavigation-v0'))
+    run_vision_env(4)
