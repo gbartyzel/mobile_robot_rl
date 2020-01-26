@@ -10,9 +10,7 @@ import torch
 import torch.nn as nn
 import tqdm
 
-from mobile_robot_rl.common.history import BaseHistory
 from mobile_robot_rl.common.logger import Logger
-from mobile_robot_rl.common.memory import Dimension
 from mobile_robot_rl.common.memory import ReplayMemory
 from mobile_robot_rl.common.memory import Rollout
 
@@ -20,7 +18,6 @@ from mobile_robot_rl.common.memory import Rollout
 class BaseOffPolicy(abc.ABC):
     def __init__(self,
                  env: gym.Env,
-                 state_dim: Dimension = None,
                  discount_factor: float = 0.99,
                  n_step: int = 1,
                  memory_capacity: int = int(1e5),
@@ -31,7 +28,6 @@ class BaseOffPolicy(abc.ABC):
                  update_frequency: int = 1,
                  target_update_frequency: int = 1000,
                  update_steps: int = 1,
-                 history: BaseHistory = BaseHistory(1),
                  use_soft_update: bool = False,
                  use_combined_experience_replay: bool = False,
                  logdir: str = './output',
@@ -47,14 +43,7 @@ class BaseOffPolicy(abc.ABC):
         self._device = torch.device(
             'cuda' if torch.cuda.is_available() else 'cpu')
 
-        if state_dim is None:
-            self._state_dim = Dimension(
-                shape=self._env.observation_space.shape[0],
-                dtype=self._env.observation_space.dtype)
-        else:
-            self._state_dim = state_dim
-        self._action_dim = Dimension(shape=self._env.action_space.shape[0],
-                                     dtype=self._env.action_space.dtype)
+        self._action_dim = self._env.action_space.shape[0]
 
         self._discount = discount_factor ** n_step
         self._n_step = n_step
@@ -70,21 +59,18 @@ class BaseOffPolicy(abc.ABC):
 
         self._update_steps = update_steps
 
+        state_dict_keys = None
+        if isinstance(self._env.observation_space.spaces, dict):
+            state_dict_keys = self._env.observation_space.spaces.keys()
         self._memory = ReplayMemory(
             capacity=memory_capacity,
-            state_dim=self._state_dim,
-            action_dim=self._action_dim,
             combined=use_combined_experience_replay,
-            torch_backend=True)
+            device=self._device,
+            torch_backend=True,
+            state_dict_keys=state_dict_keys)
 
-        self._rollout = Rollout(
-            capacity=n_step,
-            state_dim=self._state_dim,
-            action_dim=self._action_dim,
-            discount_factor=discount_factor)
-
+        self._rollout = Rollout(length=n_step, discount_factor=discount_factor)
         self._logger = Logger(self, logdir)
-        self._history = history
 
     def _step(self, train: bool = False) -> Tuple[float, bool, Dict[str, bool]]:
         if train and self._memory.size < self._warm_up_steps:
@@ -92,14 +78,13 @@ class BaseOffPolicy(abc.ABC):
         else:
             action = self._act(self._state, train)
         next_state, reward, done, info = self._env.step(action)
-        next_state = self._history(next_state)
         if train:
             self._observe(self._state, action, reward, next_state, done)
         self._state = next_state
         return reward, done, info
 
     def train(self, max_steps: int, test_interval: int = 25000):
-        self._state = self._history(self._env.reset())
+        self._state = self._env.reset()
         total_reward = []
         pb = tqdm.tqdm(total=max_steps + self._warm_up_steps)
         while self.step < max_steps:
@@ -107,7 +92,7 @@ class BaseOffPolicy(abc.ABC):
             total_reward.append(reward)
             pb.update(1)
             if done:
-                self._state = self._history(self._env.reset())
+                self._state = self._env.reset()
                 if self.step > 0:
                     self._logger.log_train(sum(total_reward),
                                            info['is_success'])
@@ -122,7 +107,7 @@ class BaseOffPolicy(abc.ABC):
         if seed is not None:
             self._set_seeds(seed)
         self._rollout.reset()
-        self._state = self._history(self._env.reset())
+        self._state = self._env.reset()
         total_reward = 0.0
         while True:
             reward, done, info = self._step(False)
@@ -158,7 +143,7 @@ class BaseOffPolicy(abc.ABC):
         self._logger.log_test(rewards, success)
         self._set_seeds(self._seed)
         self._rollout.reset()
-        self._state = self._history(self._env.reset())
+        self._state = self._env.reset()
         self.step += 1
 
     def _update_target(self, model: nn.Module, target_model: nn.Module):

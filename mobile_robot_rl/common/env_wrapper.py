@@ -1,4 +1,6 @@
 from collections import deque
+from typing import Any
+from typing import List
 from typing import Optional
 from typing import Tuple
 
@@ -44,13 +46,7 @@ class ConvertImage(gym.ObservationWrapper):
 
 
 class FrameStack(gym.Wrapper):
-    def __init__(self, env, k, nchw):
-        """Stack k last frames.
-        Returns lazy array, which is much more memory efficient.
-        See Also
-        --------
-        baselines.common.atari_wrappers.LazyFrames
-        """
+    def __init__(self, env: gym.Env, k: int = 1, nchw: bool = True):
         gym.Wrapper.__init__(self, env)
         self.k = k
         self.nchw = nchw
@@ -106,12 +102,7 @@ class FrameStack(gym.Wrapper):
 
 
 class LazyFrames:
-    def __init__(self, frames, nchw: bool = True):
-        """This object ensures that common frames between the observations are only stored once.
-        It exists purely to optimize memory usage which can be huge for DQN's 1M frames replay
-        buffers.
-        This object should only be converted to numpy array before being passed to the model.
-        You'd not believe how complex the previous solution was."""
+    def __init__(self, frames: List[Any], nchw: bool = True):
         self._frames = frames
         self._out = None
         self._nchw = nchw
@@ -143,18 +134,8 @@ class LazyFrames:
         return self._force()[..., i]
 
 
-def make_env(env):
-    env = wrappers.RescaleAction(env, -1.0, 1.0)
+def make_env(env: gym.Env, length: int):
+    env = wrappers.RescaleAction(env, 0.0, 10.0)
     env = ConvertImage(env, (64, 64), True, dict_key='image')
-    env = FrameStack(env, 4, True)
+    env = FrameStack(env, length, True)
     return env
-
-
-if __name__ == '__main__':
-    frames = [np.random.rand(1, 64, 64),
-              np.random.rand(1, 64, 64),
-              np.random.rand(1, 64, 64),
-              np.random.rand(1, 64, 64)]
-
-    lframes = LazyFrames(frames)
-    print(np.asarray(lframes).shape)
