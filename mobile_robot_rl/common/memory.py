@@ -114,7 +114,7 @@ class Rollout:
         self._buffer.append((state, action, reward))
         if self.ready:
             cum_reward = self._compute_cumulative_reward()
-            return (self._buffer[0], self._buffer[1], cum_reward,
+            return (self._buffer[0][0], self._buffer[0][1], cum_reward,
                     next_state, done)
         return None
 
@@ -126,16 +126,3 @@ class Rollout:
         for t in range(self._buffer.maxlen):
             cum_reward += self._discount_factor ** t * self._buffer[t][2]
         return cum_reward
-
-
-if __name__ == '__main__':
-    rollout = Rollout(5, 0.99)
-    for i in range(5):
-        state = np.random.rand(1, 4)
-        action = np.random.rand(2)
-        reward = 1
-        next_state = np.random.rand(1, 4)
-        mask = False
-        tran = rollout.get_transition(state, action, reward, next_state, mask)
-        if tran is not None:
-            print(tran[2])

@@ -167,12 +167,14 @@ class BaseOffPolicy(abc.ABC):
     def _convert_np_state(self, state):
         if isinstance(state, dict):
             return (
-                torch.from_numpy(state['scalars']).float().unsqueeze(0).to(
+                torch.from_numpy(
+                    np.array(state['scalars'])).float().unsqueeze(0).to(
                     self._device),
-                torch.from_numpy(state['image']).float().unsqueeze(0).to(
-                    self._device) / 255.0
-            )
-        return torch.from_numpy(state).float().unsqueeze(0).to(self._device)
+                torch.from_numpy(
+                    np.array(state['image'])).float().unsqueeze(0).to(
+                    self._device) / 255.0)
+        return torch.from_numpy(np.array(state)).float().unsqueeze(0).to(
+            self._device)
 
     def _convert_tensor_state(self, state):
         if isinstance(state, dict):

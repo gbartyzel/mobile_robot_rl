@@ -62,7 +62,7 @@ class SAC(BaseOffPolicy):
         return action[0].cpu().numpy()
 
     def _update(self):
-        batch = self._memory.sample(self._batch_size, self._device)
+        batch = self._memory.sample(self._batch_size)
         self._update_parameters(*self._compute_loses(batch))
         self._update_target(self._qv, self._target_qv)
 
